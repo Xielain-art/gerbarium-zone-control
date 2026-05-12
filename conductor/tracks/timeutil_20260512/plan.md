@@ -16,9 +16,9 @@
     - [x] Verify changes via automated or manual testing (as appropriate).
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Integrate TimeUtil into CLI Commands' (Protocol in workflow.md)
 
-## Phase 3: Integrate TimeUtil into GUI Screens
+## Phase 3: Integrate TimeUtil into GUI Screens [checkpoint: f19a707]
 - [x] Task: Update Client DTOs / GUI Rendering
     - [x] Identify all timestamp usages in GUI screens (e.g., `ZoneDetailsScreen`, event logs).
     - [x] Refactor client-side rendering or server-side DTO generation to use `TimeUtil`.
     - [x] Verify changes via automated or manual testing.
-- [~] Task: Conductor - User Manual Verification 'Phase 3: Integrate TimeUtil into GUI Screens' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Integrate TimeUtil into GUI Screens' (Protocol in workflow.md)
