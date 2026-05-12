@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "${mod_id}",
+	"version": "${version}",
+	"name": "Gerbarium Template",
+	"description": "Base Fabric mod template for Gerbarium Minecraft 1.20.1 mods.",
+	"authors": [
+		"Ratmir Klimov"
+	],
+	"contact": {},
+	"license": "All Rights Reserved",
+	"icon": "assets/gerbarium_template/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.gerbarium.template.GerbariumTemplateMod"
+		],
+		"client": [
+			"com.gerbarium.template.client.GerbariumTemplateClient"
+		]
+	},
+	"mixins": [
+		"gerbarium_template.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.15.11",
+		"minecraft": "1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	}
+}
