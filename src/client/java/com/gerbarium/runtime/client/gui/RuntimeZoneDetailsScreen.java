@@ -6,6 +6,7 @@ import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
 import io.wispforest.owo.ui.core.*;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
@@ -41,6 +42,19 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
 
         header.child(Components.button(Text.literal("Zone Events"), button -> {
             this.client.setScreen(new RuntimeEventsScreen(this, snapshot));
+        }).margins(Insets.left(10)));
+
+        header.child(Components.button(Text.literal("Force Spawn"), button -> {
+            MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
+                Text.literal("Force Spawn Zone"),
+                Text.literal("This will force spawn mobs for all rules in this zone. Proceed?"),
+                () -> {
+                    net.minecraft.network.PacketByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+                    buf.writeString("FORCE_SPAWN");
+                    buf.writeString(zone.id);
+                    net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(com.gerbarium.runtime.network.GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
+                }
+            ));
         }).margins(Insets.left(10)));
         
         rootComponent.child(header.margins(Insets.bottom(15)));

@@ -6,6 +6,7 @@ import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
 import io.wispforest.owo.ui.core.*;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
@@ -36,6 +37,20 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> {
         header.child(Components.button(Text.literal("Back"), button -> {
             this.client.setScreen(parent);
         }).margins(Insets.left(20)));
+
+        header.child(Components.button(Text.literal("Reset Cooldown"), button -> {
+            MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
+                Text.literal("Reset Cooldown"),
+                Text.literal("This will reset the cooldown for this rule. Proceed?"),
+                () -> {
+                    net.minecraft.network.PacketByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
+                    buf.writeString("RESET_RULE_COOLDOWN");
+                    buf.writeString(rule.zoneId);
+                    buf.writeString(rule.id);
+                    net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(com.gerbarium.runtime.network.GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
+                }
+            ));
+        }).margins(Insets.left(10)));
         
         rootComponent.child(header.margins(Insets.bottom(15)));
 

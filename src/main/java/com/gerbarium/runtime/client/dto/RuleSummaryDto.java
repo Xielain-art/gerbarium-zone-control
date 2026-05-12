@@ -2,6 +2,7 @@ package com.gerbarium.runtime.client.dto;
 
 public class RuleSummaryDto {
     public String id;
+    public String zoneId;
     public String name;
     public String entity;
     public String spawnType;

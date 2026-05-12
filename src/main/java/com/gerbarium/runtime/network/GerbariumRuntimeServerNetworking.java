@@ -47,6 +47,13 @@ public class GerbariumRuntimeServerNetworking {
                     result = RuntimeAdminService.reload(player.getName().getString());
                 } else if ("CLEANUP_ORPHANS".equals(action)) {
                     result = RuntimeAdminService.cleanupOrphans(server, player.getName().getString());
+                } else if ("FORCE_SPAWN".equals(action)) {
+                    String zoneId = buf.readString();
+                    result = RuntimeAdminService.forceSpawnZone(zoneId, server, player.getName().getString());
+                } else if ("RESET_RULE_COOLDOWN".equals(action)) {
+                    String zoneId = buf.readString();
+                    String ruleId = buf.readString();
+                    result = RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, player.getName().getString());
                 } else {
                     result = new ActionResultDto(false, "Unknown action: " + action);
                 }
@@ -98,6 +105,7 @@ public class GerbariumRuntimeServerNetworking {
             for (MobRule rule : zone.mobs) {
                 RuleSummaryDto rs = new RuleSummaryDto();
                 rs.id = rule.id;
+                rs.zoneId = zone.id;
                 rs.name = rule.name;
                 rs.entity = rule.entity;
                 rs.spawnType = rule.spawnType.name();
