@@ -1,0 +1,8 @@
+{
+  "track_id": "timeutil_20260512",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-05-12T00:00:00Z",
+  "updated_at": "2026-05-12T00:00:00Z",
+  "description": "Implement a TimeUtil class for smart time formatting to replace raw milliseconds in GUI and CLI with readable strings like '2 minutes ago'."
+}
