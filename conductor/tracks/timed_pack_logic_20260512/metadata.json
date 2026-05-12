@@ -1,8 +1,0 @@
-{
-  "track_id": "timed_pack_logic_20260512",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-05-12T00:00:00Z",
-  "updated_at": "2026-05-12T00:00:00Z",
-  "description": "Implement TIMED spawn logic for mob packs, reusing respawnSeconds and tracking state in runtime state files with pause/resume support and maxAlive primary mob limits."
-}
