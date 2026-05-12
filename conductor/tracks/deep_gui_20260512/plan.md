@@ -23,7 +23,7 @@
 - [x] Task: Write verification checks/tests for RuleDetails UI components
 - [x] Task: Conductor - User Manual Verification 'Phase 2: RuleDetails Screen Implementation' (Protocol in workflow.md)
 
-## Phase 3: EventsScreen (Event Log) Implementation
+## Phase 3: EventsScreen (Event Log) Implementation [checkpoint: 6110a80]
 - [x] Task: Implement EventsScreen basic layout and event list
     - [x] Setup `owo-lib` UI model layout for EventsScreen.
     - [x] Create a scrollable, paginated list component for chronological events.
@@ -33,7 +33,7 @@
     - [x] Add UI controls for zone filtering.
     - [x] Connect filters to dynamically update the event list.
 - [x] Task: Write verification checks/tests for EventsScreen rendering and filtering
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: EventsScreen (Event Log) Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: EventsScreen (Event Log) Implementation' (Protocol in workflow.md)
 
 ## Phase 4: Integration and Final Polish
 - [ ] Task: Integrate new screens with existing main list
