@@ -116,11 +116,13 @@ public class GerbariumRuntimeServerNetworking {
                 rs.spawnCount = rule.spawnCount;
                 rs.respawnSeconds = rule.respawnSeconds;
                 rs.chance = rule.chance;
+                rs.timedMaxSpawnsPerActivation = rule.timedMaxSpawnsPerActivation;
                 rs.cooldownStart = rule.cooldownStart.name();
 
                 var ruleState = zf.rules.get(rule.id);
                 if (ruleState != null) {
                     rs.active = rule.enabled;
+                    rs.timedSpawnedThisActivation = ruleState.timedSpawnedThisActivation;
                     rs.lastAttemptAt = ruleState.lastAttemptAt;
                     rs.lastAttemptResult = ruleState.lastAttemptResult;
                     rs.lastAttemptReason = ruleState.lastAttemptReason;

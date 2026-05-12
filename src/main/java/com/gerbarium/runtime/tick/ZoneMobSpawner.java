@@ -63,6 +63,12 @@ public class ZoneMobSpawner {
         long now = System.currentTimeMillis();
 
         if (rule.refillMode == com.gerbarium.runtime.model.RefillMode.TIMED) {
+            // Anti-farm check: Per-activation budget
+            int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
+            if (budget != -1 && state.timedSpawnedThisActivation >= budget) {
+                return 0;
+            }
+
             if (!TimedSpawnLogic.shouldSpawn(now, rule, state)) {
                 return 0;
             }
@@ -108,6 +114,10 @@ public class ZoneMobSpawner {
         state.lastActivationSpawnAt = now;
         state.lastAttemptAt = now;
         if (spawned > 0) {
+            if (rule.refillMode == com.gerbarium.runtime.model.RefillMode.TIMED) {
+                state.timedSpawnedThisActivation += spawned;
+            }
+
             state.lastSuccessAt = now;
             state.lastAttemptResult = "SUCCESS";
             state.lastAttemptReason = "Spawned " + spawned + " primary mobs";

@@ -15,9 +15,11 @@ public class RuleSummaryDto {
     public int spawnCount;
     public int respawnSeconds;
     public double chance;
+    public Integer timedMaxSpawnsPerActivation;
     public String cooldownStart;
     
     // Runtime State
+    public int timedSpawnedThisActivation;
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
     public String lastAttemptReason = "";

@@ -30,6 +30,7 @@ public class RuleRuntimeState {
     public long timedProgressMillis;
     public long lastTimedTickAt;
     public long nextTimedSpawnInMillis;
+    public int timedSpawnedThisActivation;
 
     public int knownAlive;
 

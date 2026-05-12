@@ -110,6 +110,7 @@ public class ZoneActivationManager {
         for (com.gerbarium.runtime.model.MobRule rule : zone.mobs) {
             com.gerbarium.runtime.state.RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
             TimedSpawnLogic.resetTimer(state);
+            state.timedSpawnedThisActivation = 0;
             
             if (anyDespawned && rule.spawnType == com.gerbarium.runtime.model.SpawnType.UNIQUE) {
                 com.gerbarium.runtime.tracking.MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, false, true);

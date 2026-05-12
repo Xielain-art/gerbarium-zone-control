@@ -18,6 +18,7 @@ public class RuleRuntimeStateSerializationTest {
         state.timedProgressMillis = 1500L;
         state.lastTimedTickAt = 1000L;
         state.nextTimedSpawnInMillis = 5000L;
+        state.timedSpawnedThisActivation = 2;
 
         String json = GSON.toJson(state);
         RuleRuntimeState deserialized = GSON.fromJson(json, RuleRuntimeState.class);
@@ -25,5 +26,6 @@ public class RuleRuntimeStateSerializationTest {
         assertEquals(1500L, deserialized.timedProgressMillis);
         assertEquals(1000L, deserialized.lastTimedTickAt);
         assertEquals(5000L, deserialized.nextTimedSpawnInMillis);
+        assertEquals(2, deserialized.timedSpawnedThisActivation);
     }
 }

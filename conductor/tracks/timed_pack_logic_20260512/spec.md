@@ -12,36 +12,34 @@ Currently, the Gerbarium Regions Runtime only supports `ON_ACTIVATION` logic for
 3. **State Persistence (Pause & Resume):** 
    - When the zone deactivates, the timer progress pauses and is saved in the per-zone runtime state file (`/config/gerbarium/zones-control/states/<zoneId>.runtime-state.json`).
    - When the zone activates again, the timer resumes from the saved progress.
-   - Add necessary fields to `RuleRuntimeState` (e.g., `timedProgressMillis` or `nextTimedSpawnInMillis`) to support pause/resume and survive server restarts.
-4. **Spawn Limits (Max Alive):** 
+   - Add necessary fields to `RuleRuntimeState` (e.g., `timedProgressMillis`, `lastTimedTickAt`, `timedSpawnedThisActivation`) to support pause/resume and budget tracking.
+4. **Anti-Farm Protection (Per-Activation Budget):**
+   - During one continuous zone activation, a `TIMED` rule can spawn at most `timedMaxSpawnsPerActivation` primary mobs total.
+   - **Default:** `timedMaxSpawnsPerActivation = maxAlive`.
+   - If `timedSpawnedThisActivation >= timedMaxSpawnsPerActivation`, no more `TIMED` spawns occur during this activation.
+   - The budget resets only when the zone deactivates and is later reactivated.
+   - Setting `timedMaxSpawnsPerActivation: -1` allows unlimited spawns while active.
+5. **Spawn Limits (Max Alive):** 
    - If the number of alive **primary mobs** for this rule is `>= maxAlive`, the spawn is skipped.
    - **Companion mobs must not be counted** towards the `maxAlive` limit.
    - Do not spawn extra mobs later to compensate for skipped spawns.
    - Do not create accumulated/backlogged spawn events.
    - The timer should continue/pause in a safe way, but *never* burst-spawn missed intervals.
-5. **Configuration Schema:** 
-   - Do not add new fields for intervals.
-   - Use the existing `respawnSeconds` field. For `PACK` + `TIMED`, `respawnSeconds` represents the timed spawn interval in seconds.
-   - Keep the JSON schema `camelCase` and compatible with the current bridge format. Example:
-     ```json
-     {
-       "spawnType": "PACK",
-       "refillMode": "TIMED",
-       "maxAlive": 10,
-       "spawnCount": 2,
-       "respawnSeconds": 300,
-       "chance": 1.0
-     }
-     ```
+6. **Configuration Schema:** 
+   - Use the existing `respawnSeconds` field for the interval.
+   - Add optional field `timedMaxSpawnsPerActivation` (defaulting to `maxAlive` if null/not provided).
+7. **GUI & Monitoring:**
+   - Show a warning in the GUI/commands if `timedMaxSpawnsPerActivation = -1` ("Farm risk: unlimited TIMED spawning").
+   - Display the current budget usage in rule status (e.g., "TIMED budget: 2/2 used this activation").
 
 ## Non-Functional Requirements
 - **Performance:** Tracking timer state and alive mob counts per zone/pack must be efficient and not degrade server performance during active zone ticking.
 
 ## Acceptance Criteria
-- [ ] A rule configured with `spawnType: "PACK"` and `refillMode: "TIMED"` spawns `spawnCount` mobs repeatedly every `respawnSeconds` while players are in the zone.
-- [ ] The timer pauses when the zone is deactivated and resumes correctly upon reactivation without catching up.
-- [ ] Spawns are skipped (and not burst-spawned later) if the number of alive **primary mobs** from the rule reaches `maxAlive`. Companion mobs are correctly excluded from this count.
-- [ ] The zone state file (`<zoneId>.runtime-state.json`) correctly stores and restores the elapsed time/progress for `TIMED` rules.
+- [ ] A `TIMED` rule spawns mobs at the specified interval *up to* the `timedMaxSpawnsPerActivation` limit per activation.
+- [ ] The budget resets upon zone reactivation.
+- [ ] If `maxAlive` is reached, spawns are skipped (and not backlogged).
+- [ ] GUI displays appropriate warnings and current budget status.
 
 ## Out of Scope
 - Modifying `UNIQUE` encounter logic.

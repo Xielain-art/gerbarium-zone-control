@@ -14,6 +14,7 @@ public class MobRule {
     public int spawnCount = 4;
     public int respawnSeconds = 900;
     public double chance = 1.0;
+    public Integer timedMaxSpawnsPerActivation = null;
     public CooldownStart cooldownStart = CooldownStart.AFTER_ACTIVATION;
     public boolean spawnWhenReady = true;
     public int failedSpawnRetrySeconds = 60;

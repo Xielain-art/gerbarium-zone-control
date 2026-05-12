@@ -53,6 +53,15 @@ public class RuntimeQueryService {
             
             if (rs != null) {
                 sb.append("Last Result: ").append(rs.lastAttemptResult);
+                
+                if (rule.refillMode == com.gerbarium.runtime.model.RefillMode.TIMED) {
+                    int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
+                    if (budget == -1) {
+                        sb.append(". TIMED budget: UNLIMITED (Farm risk!)");
+                    } else {
+                        sb.append(". TIMED budget: ").append(rs.timedSpawnedThisActivation).append("/").append(budget).append(" used");
+                    }
+                }
             }
             sb.append("\n");
         }
