@@ -9,15 +9,15 @@
     - [x] Verify all tests pass.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Implement TimeUtil Logic' (Protocol in workflow.md)
 
-## Phase 2: Integrate TimeUtil into CLI Commands
-- [~] Task: Update `/gerbzone status` output
-    - [ ] Identify all timestamp usages in `RuntimeQueryService` (e.g., last attempt, next available).
-    - [ ] Refactor formatting to use `TimeUtil`.
-    - [ ] Verify changes via automated or manual testing (as appropriate).
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Integrate TimeUtil into CLI Commands' (Protocol in workflow.md)
+## Phase 2: Integrate TimeUtil into CLI Commands [checkpoint: 45234f3]
+- [x] Task: Update `/gerbzone status` output
+    - [x] Identify all timestamp usages in `RuntimeQueryService` (e.g., last attempt, next available).
+    - [x] Refactor formatting to use `TimeUtil`.
+    - [x] Verify changes via automated or manual testing (as appropriate).
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Integrate TimeUtil into CLI Commands' (Protocol in workflow.md)
 
 ## Phase 3: Integrate TimeUtil into GUI Screens
-- [ ] Task: Update Client DTOs / GUI Rendering
+- [~] Task: Update Client DTOs / GUI Rendering
     - [ ] Identify all timestamp usages in GUI screens (e.g., `ZoneDetailsScreen`, event logs).
     - [ ] Refactor client-side rendering or server-side DTO generation to use `TimeUtil`.
     - [ ] Verify changes via automated or manual testing.
