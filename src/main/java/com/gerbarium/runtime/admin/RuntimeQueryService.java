@@ -12,6 +12,8 @@ import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
 import com.gerbarium.runtime.tracking.MobTracker;
 
+import com.gerbarium.runtime.util.TimeUtil;
+
 import java.util.Optional;
 
 public class RuntimeQueryService {
@@ -32,6 +34,9 @@ public class RuntimeQueryService {
         sb.append("Nearby Players: ").append(zState.nearbyPlayers.size()).append("\n");
 
         if (pState != null) {
+            sb.append("Last Player Seen: ").append(TimeUtil.formatRelative(pState.lastPlayerSeenAt)).append("\n");
+            sb.append("Last Activated: ").append(TimeUtil.formatRelative(pState.lastActivatedAt)).append(" (").append(pState.lastActivationReason).append(")\n");
+            sb.append("Last Deactivated: ").append(TimeUtil.formatRelative(pState.lastDeactivatedAt)).append(" (").append(pState.lastDeactivationReason).append(")\n");
             sb.append("Total Activations: ").append(pState.totalActivations).append("\n");
             sb.append("Total Successful Spawns: ").append(pState.totalSuccessfulSpawns).append("\n");
         }
@@ -52,15 +57,24 @@ public class RuntimeQueryService {
             }
             
             if (rs != null) {
-                sb.append("Last Result: ").append(rs.lastAttemptResult);
+                sb.append("Result: ").append(rs.lastAttemptResult).append(". ");
                 
                 if (rule.refillMode == com.gerbarium.runtime.model.RefillMode.TIMED) {
                     int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
                     if (budget == -1) {
-                        sb.append(". TIMED budget: UNLIMITED (Farm risk!)");
+                        sb.append("Budget: UNLIMITED. ");
                     } else {
-                        sb.append(". TIMED budget: ").append(rs.timedSpawnedThisActivation).append("/").append(budget).append(" used");
+                        sb.append("Budget: ").append(rs.timedSpawnedThisActivation).append("/").append(budget).append(" used. ");
                     }
+                    sb.append("Next Timed Spawn: ").append(TimeUtil.formatDuration(Math.max(0, (rule.respawnSeconds * 1000L) - rs.timedProgressMillis))).append(". ");
+                } else {
+                    if (rs.nextAvailableAt > System.currentTimeMillis()) {
+                        sb.append("Next Available: ").append(TimeUtil.formatRelative(rs.nextAvailableAt)).append(". ");
+                    }
+                }
+                
+                if (rs.lastAttemptAt > 0) {
+                    sb.append("Last Attempt: ").append(TimeUtil.formatRelative(rs.lastAttemptAt)).append(". ");
                 }
             }
             sb.append("\n");
