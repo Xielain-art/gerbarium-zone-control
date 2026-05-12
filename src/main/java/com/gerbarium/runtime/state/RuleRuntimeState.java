@@ -27,6 +27,9 @@ public class RuleRuntimeState {
     public long nextAttemptAt;
     public long nextAvailableAt;
 
+    public long timedProgressMillis;
+    public long nextTimedSpawnInMillis;
+
     public int knownAlive;
 
     public long totalAttempts;
