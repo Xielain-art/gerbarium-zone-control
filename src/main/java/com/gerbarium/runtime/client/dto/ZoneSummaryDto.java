@@ -18,6 +18,11 @@ public class ZoneSummaryDto {
     public long lastActivatedAt;
     public long lastDeactivatedAt;
     public long lastPlayerSeenAt;
+    public int companionsAliveTotal;
+    public boolean stateFileExists = true;
+    public boolean dirty;
+    public String attentionStatus = "";
+    public String warningText = "";
     public String statusText = "";
     public List<RuleSummaryDto> rules = new ArrayList<>();
 }

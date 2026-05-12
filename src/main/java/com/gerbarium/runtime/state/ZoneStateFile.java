@@ -11,6 +11,7 @@ public class ZoneStateFile {
     public ZoneRuntimePersistentState zone;
     public Map<String, RuleRuntimeState> rules = new HashMap<>();
     public List<RuntimeEvent> recentEvents = new ArrayList<>();
+    public transient boolean dirty = false;
 
     public ZoneStateFile() {}
 

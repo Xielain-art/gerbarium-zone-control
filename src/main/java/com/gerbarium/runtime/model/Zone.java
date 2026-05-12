@@ -9,6 +9,7 @@ public class Zone {
     public String dimension;
     public Vec3iJson min;
     public Vec3iJson max;
+    public int priority = 0;
     public ZoneActivationSettings activation = new ZoneActivationSettings();
     public ZoneSpawnSettings spawn = new ZoneSpawnSettings();
     public List<MobRule> mobs = new ArrayList<>();

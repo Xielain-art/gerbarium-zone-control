@@ -20,11 +20,28 @@ public class RuleSummaryDto {
     
     // Runtime State
     public int timedSpawnedThisActivation;
+    public long timedProgressMillis;
+    public boolean timedBudgetExhausted;
+    public long lastTimedBudgetResetAt;
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
     public String lastAttemptReason = "";
     public long lastSuccessAt;
     public long nextAvailableAt;
+    public long nextAttemptAt;
     public long totalAttempts;
     public long totalSuccesses;
+    
+    // UNIQUE fields
+    public boolean encounterActive;
+    public long encounterStartedAt;
+    public long encounterClearedAt;
+    public int encounterPrimaryAlive;
+    public int encounterCompanionsAlive;
+    
+    // Display helpers
+    public String statusText = "";
+    public String nextActionText = "";
+    public String warningText = "";
+    public String hintText = "";
 }

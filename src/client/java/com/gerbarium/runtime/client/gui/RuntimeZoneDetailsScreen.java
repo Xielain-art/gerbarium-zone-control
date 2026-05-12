@@ -35,19 +35,19 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
 
         // Header
         FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        header.child(Components.label(Text.literal("Zone Details: " + zone.id)));
+        header.child(Components.label(Text.literal("Zone: " + zone.id)));
         header.child(Components.button(Text.literal("Back"), button -> {
             this.client.setScreen(parent);
         }).margins(Insets.left(20)));
 
-        header.child(Components.button(Text.literal("Zone Events"), button -> {
+        header.child(Components.button(Text.literal("Events"), button -> {
             this.client.setScreen(new RuntimeEventsScreen(this, snapshot));
         }).margins(Insets.left(10)));
 
         header.child(Components.button(Text.literal("Force Spawn"), button -> {
             MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
                 Text.literal("Force Spawn Zone"),
-                Text.literal("This will force spawn mobs for all rules in this zone. Proceed?"),
+                Text.literal("Force spawn mobs for all rules in this zone?"),
                 () -> {
                     net.minecraft.network.PacketByteBuf buf = net.fabricmc.fabric.api.networking.v1.PacketByteBufs.create();
                     buf.writeString("FORCE_SPAWN");
@@ -65,38 +65,64 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
 
         // Runtime State Section
         details.child(Components.label(Text.literal("Runtime State")).margins(Insets.bottom(5)));
-        details.child(createDetailRow("Status", zone.active ? "ACTIVE" : "INACTIVE", zone.active ? 0x00FF00 : 0xAAAAAA));
-        details.child(createDetailRow("Nearby Players", String.valueOf(zone.nearbyPlayers), 0xFFFFFF));
-        details.child(createDetailRow("Primary Alive", String.valueOf(zone.primaryAliveTotal), 0xFFFFFF));
+        
+        String statusText = zone.enabled ? (zone.active ? "ACTIVE" : "INACTIVE") : "DISABLED";
+        int statusColor = zone.enabled ? (zone.active ? 0x00FF00 : 0xAAAAAA) : 0xFF0000;
+        details.child(createDetailRow("Status", statusText, statusColor));
+        details.child(createDetailRow("Nearby Players", String.valueOf(zone.nearbyPlayers), zone.nearbyPlayers > 0 ? 0xFFFFFF : 0x888888));
+        details.child(createDetailRow("Primary Mobs Alive", String.valueOf(zone.primaryAliveTotal), zone.primaryAliveTotal > 0 ? 0x00FFFF : 0x888888));
         
         // Config Details Section
         details.child(Components.label(Text.literal("Configuration")).margins(Insets.vertical(5)));
         details.child(createDetailRow("Dimension", zone.dimension, 0xFFFFFF));
-        details.child(createDetailRow("Bounds Min", String.format("%d, %d, %d", zone.minX, zone.minY, zone.minZ), 0xFFFFFF));
-        details.child(createDetailRow("Bounds Max", String.format("%d, %d, %d", zone.maxX, zone.maxY, zone.maxZ), 0xFFFFFF));
+        details.child(createDetailRow("Bounds Min", String.format("%d, %d, %d", zone.minX, zone.minY, zone.minZ), 0xAAAAAA));
+        details.child(createDetailRow("Bounds Max", String.format("%d, %d, %d", zone.maxX, zone.maxY, zone.maxZ), 0xAAAAAA));
         details.child(createDetailRow("Priority", String.valueOf(zone.priority), 0xFFFFFF));
 
-        // Applied Rules Section
-        details.child(Components.label(Text.literal("Applied Rules")).margins(Insets.vertical(5)));
-        for (var rule : zone.rules) {
-            FlowLayout ruleRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-            ruleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-            ruleRow.child(Components.label(Text.literal("- " + rule.name)).sizing(Sizing.fixed(120)));
-            ruleRow.child(Components.label(Text.literal(rule.aliveCount + "/" + rule.maxAlive + " alive")));
-            
-            ruleRow.child(Components.button(Text.literal("Rule Details"), button -> {
-                this.client.setScreen(new RuntimeRuleDetailsScreen(this, rule));
-            }).margins(Insets.left(10)).sizing(Sizing.content()));
-            
-            details.child(ruleRow.margins(Insets.vertical(1)));
+        // Rules Section
+        details.child(Components.label(Text.literal("Mob Rules (" + zone.rules.size() + ")")).margins(Insets.vertical(5)));
+        
+        if (zone.rules.isEmpty()) {
+            details.child(Components.label(Text.literal("No rules configured")).color(Color.ofRgb(0xFFFF00)));
+        } else {
+            for (var rule : zone.rules) {
+                FlowLayout ruleRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+                ruleRow.surface(Surface.DARK_PANEL).padding(Insets.of(3)).margins(Insets.vertical(1));
+                ruleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+
+                // Rule name
+                ruleRow.child(Components.label(Text.literal(rule.name)).sizing(Sizing.fixed(120)));
+                
+                // Entity type
+                ruleRow.child(Components.label(Text.literal(rule.entity))
+                        .color(Color.ofRgb(0xAAAAAA))
+                        .sizing(Sizing.fixed(100)));
+                
+                // Alive count
+                int aliveColor = rule.aliveCount >= rule.maxAlive ? 0xFF0000 : (rule.aliveCount > 0 ? 0x00FF00 : 0x888888);
+                ruleRow.child(Components.label(Text.literal(rule.aliveCount + "/" + rule.maxAlive))
+                        .color(Color.ofRgb(aliveColor))
+                        .sizing(Sizing.fixed(50)));
+                
+                // Spawn type
+                ruleRow.child(Components.label(Text.literal(rule.spawnType))
+                        .color(Color.ofRgb(0xFFFF00))
+                        .sizing(Sizing.fixed(60)));
+                
+                ruleRow.child(Components.button(Text.literal("Details"), button -> {
+                    this.client.setScreen(new RuntimeRuleDetailsScreen(this, rule));
+                }).margins(Insets.left(5)).sizing(Sizing.content()));
+                
+                details.child(ruleRow);
+            }
         }
 
-        rootComponent.child(details);
+        rootComponent.child(Containers.verticalScroll(Sizing.fill(90), Sizing.fill(75), details));
     }
 
     private FlowLayout createDetailRow(String label, String value, int color) {
         FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(Components.label(Text.literal(label + ": ")).sizing(Sizing.fixed(120)));
+        row.child(Components.label(Text.literal(label + ": ")).sizing(Sizing.fixed(150)));
         row.child(Components.label(Text.literal(value)).color(Color.ofRgb(color)));
         row.margins(Insets.vertical(2));
         return row;

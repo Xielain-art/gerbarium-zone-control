@@ -58,6 +58,7 @@ public class ZoneActivationManager {
     private static void activateZone(Zone zone, ZoneRuntimeState zState, ZoneRuntimePersistentState pState, long now, String playerName) {
         zState.active = true;
         zState.activatedAtMillis = now;
+        zState.activationId++;
         zState.firstSpawnDelayPassed = false;
 
         pState.lastActivatedAt = now;
@@ -110,7 +111,7 @@ public class ZoneActivationManager {
         for (com.gerbarium.runtime.model.MobRule rule : zone.mobs) {
             com.gerbarium.runtime.state.RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
             TimedSpawnLogic.resetTimer(state);
-            state.timedSpawnedThisActivation = 0;
+            // Do NOT reset timedSpawnedThisActivation here - budget persists until reactivation cooldown passes
             
             if (anyDespawned && rule.spawnType == com.gerbarium.runtime.model.SpawnType.UNIQUE) {
                 com.gerbarium.runtime.tracking.MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, false, true);

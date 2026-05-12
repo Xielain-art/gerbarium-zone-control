@@ -41,6 +41,9 @@ public class GerbariumRuntimeServerNetworking {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
 
             String action = buf.readString();
+            String param1 = buf.isReadable() ? buf.readString() : null;
+            String param2 = buf.isReadable() ? buf.readString() : null;
+            
             server.execute(() -> {
                 ActionResultDto result;
                 if ("RELOAD".equals(action)) {
@@ -48,12 +51,9 @@ public class GerbariumRuntimeServerNetworking {
                 } else if ("CLEANUP_ORPHANS".equals(action)) {
                     result = RuntimeAdminService.cleanupOrphans(server, player.getName().getString());
                 } else if ("FORCE_SPAWN".equals(action)) {
-                    String zoneId = buf.readString();
-                    result = RuntimeAdminService.forceSpawnZone(zoneId, server, player.getName().getString());
+                    result = RuntimeAdminService.forceSpawnZone(param1, server, player.getName().getString());
                 } else if ("RESET_RULE_COOLDOWN".equals(action)) {
-                    String zoneId = buf.readString();
-                    String ruleId = buf.readString();
-                    result = RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, player.getName().getString());
+                    result = RuntimeAdminService.resetRuleCooldown(param1, param2, player.getName().getString());
                 } else {
                     result = new ActionResultDto(false, "Unknown action: " + action);
                 }
@@ -82,7 +82,13 @@ public class GerbariumRuntimeServerNetworking {
             var zState = ZoneActivationManager.getZoneState(zone.id);
             z.active = zState.active;
             z.nearbyPlayers = zState.nearbyPlayers.size();
-            z.primaryAliveTotal = MobTracker.getPrimaryAliveCount(zone.id, ""); // Placeholder for total primary alive
+            
+            // Calculate total primary alive across all rules
+            int totalPrimaryAlive = 0;
+            for (MobRule rule : zone.mobs) {
+                totalPrimaryAlive += MobTracker.getPrimaryAliveCount(zone.id, rule.id);
+            }
+            z.primaryAliveTotal = totalPrimaryAlive;
             
             z.minX = zone.min.x;
             z.minY = zone.min.y;
@@ -90,6 +96,7 @@ public class GerbariumRuntimeServerNetworking {
             z.maxX = zone.max.x;
             z.maxY = zone.max.y;
             z.maxZ = zone.max.z;
+            z.priority = zone.priority;
 
             var zf = com.gerbarium.runtime.storage.RuntimeStateStorage.getZoneState(zone.id);
             for (var event : zf.recentEvents) {

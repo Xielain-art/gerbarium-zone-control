@@ -7,6 +7,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Centralized time formatting utility.
+ * TODO: Replace hardcoded English strings with Text.translatable keys for proper localization (ru_ru/en_us).
+ */
 public class TimeUtil {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

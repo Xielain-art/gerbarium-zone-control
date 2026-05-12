@@ -7,6 +7,8 @@ import com.gerbarium.runtime.state.RuleRuntimeState;
 import com.gerbarium.runtime.state.RuntimeEvent;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneRepository;
+import com.gerbarium.runtime.tick.ZoneActivationManager;
+import com.gerbarium.runtime.state.ZoneRuntimeState;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.MinecraftServer;
@@ -38,8 +40,16 @@ public class MobTracker {
         if (infoOpt.isEmpty()) return;
 
         ManagedMobInfo info = infoOpt.get();
+        
         if ("PRIMARY".equals(info.role)) {
             decrementPrimary(info.zoneId, info.ruleId);
+            
+            // Update lastDeathAt only for normal (non-forced) mobs
+            if (!info.forced) {
+                RuleRuntimeState state = RuntimeStateStorage.getRuleState(info.zoneId, info.ruleId);
+                state.lastDeathAt = System.currentTimeMillis();
+                RuntimeStateStorage.markDirty(info.zoneId);
+            }
         } else if ("COMPANION".equals(info.role)) {
             decrementCompanion(info.zoneId, info.ruleId);
         }
@@ -63,6 +73,14 @@ public class MobTracker {
         if (ruleOpt.isEmpty() || ruleOpt.get().spawnType != SpawnType.UNIQUE) return;
 
         RuleRuntimeState state = RuntimeStateStorage.getRuleState(zoneId, ruleId);
+        
+        // Forced encounters should not affect normal encounter state
+        if (forced) {
+            // Forced mobs died, but don't clear normal encounter or start cooldown
+            RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCED_UNIQUE_CLEARED", "Forced unique encounter cleared (normal schedule unchanged)");
+            return;
+        }
+        
         if (!state.encounterActive) return;
 
         int pAlive = getPrimaryAliveCount(zoneId, ruleId);
@@ -76,10 +94,7 @@ public class MobTracker {
             state.encounterClearedAt = System.currentTimeMillis();
             state.lastDeathAt = state.encounterClearedAt;
 
-            if (forced) {
-                state.lastAttemptReason = "Forced unique encounter cleared, cooldown unchanged";
-                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Forced unique encounter cleared");
-            } else if (cleanup) {
+            if (cleanup) {
                 state.nextAttemptAt = state.encounterClearedAt + ruleOpt.get().failedSpawnRetrySeconds * 1000L;
                 state.lastAttemptReason = "Unique encounter cleaned up, retry scheduled";
                 RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleaned up");
@@ -152,8 +167,12 @@ public class MobTracker {
 
     public static void resyncActiveZones(MinecraftServer server) {
         primaryCounts.clear();
+        companionCounts.clear();
 
         for (Zone zone : ZoneRepository.getEnabledZones()) {
+            ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
+            if (!zState.active) continue;
+            
             ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new net.minecraft.util.Identifier(zone.dimension)));
             if (world == null) continue;
 
@@ -161,8 +180,12 @@ public class MobTracker {
 
             for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
                 Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
-                if (info.isPresent() && info.get().zoneId.equals(zone.id) && info.get().role.equals("PRIMARY")) {
-                    incrementPrimary(zone.id, info.get().ruleId);
+                if (info.isPresent() && info.get().zoneId.equals(zone.id)) {
+                    if ("PRIMARY".equals(info.get().role)) {
+                        incrementPrimary(zone.id, info.get().ruleId);
+                    } else if ("COMPANION".equals(info.get().role)) {
+                        incrementCompanion(zone.id, info.get().ruleId);
+                    }
                 }
             }
         }

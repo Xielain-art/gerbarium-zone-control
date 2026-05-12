@@ -7,7 +7,6 @@ import io.wispforest.owo.ui.base.BaseOwoScreen;
 import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
-import io.wispforest.owo.ui.container.ScrollContainer;
 import io.wispforest.owo.ui.core.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -40,14 +39,21 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
 
         // Header
         FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        header.child(Components.label(Text.literal("Gerbarium Regions Runtime")));
+        header.child(Components.label(Text.literal("Gerbarium Regions Runtime")).margins(Insets.right(10)));
+        
+        if (snapshot != null) {
+            header.child(Components.label(Text.literal("Zones: " + snapshot.totalZones + " | Enabled: " + snapshot.enabledZones))
+                    .color(Color.ofRgb(0xAAAAAA)).margins(Insets.right(10)));
+        }
+        
         header.child(Components.button(Text.literal("Refresh"), button -> {
             ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
-        }).margins(Insets.left(20)));
-        header.child(Components.button(Text.literal("Reload"), button -> {
+        }).margins(Insets.left(10)));
+        
+        header.child(Components.button(Text.literal("Reload Zones"), button -> {
             MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
                 Text.literal("Reload Zones"),
-                Text.literal("This will re-read zone JSON files. Cooldowns will be kept."),
+                Text.literal("Re-read zone JSON files. Cooldowns will be kept."),
                 () -> {
                     PacketByteBuf buf = PacketByteBufs.create();
                     buf.writeString("RELOAD");
@@ -56,11 +62,11 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
             ));
         }).margins(Insets.left(5)));
 
-        header.child(Components.button(Text.literal("Events Log"), button -> {
+        header.child(Components.button(Text.literal("Events"), button -> {
             if (snapshot != null) {
                 MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot));
             }
-        }).margins(Insets.left(20)));
+        }).margins(Insets.left(10)));
         
         rootComponent.child(header.margins(Insets.bottom(10)));
 
@@ -77,25 +83,56 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
 
     private void rebuildZonesList() {
         zonesList.clearChildren();
+        
+        if (snapshot.zones.isEmpty()) {
+            zonesList.child(Components.label(Text.literal("No zones loaded. Add zone JSON files to config/gerbarium/zones/"))
+                    .color(Color.ofRgb(0xFFFF00)));
+            return;
+        }
+        
         for (ZoneSummaryDto zone : snapshot.zones) {
             FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
             row.surface(Surface.PANEL).padding(Insets.of(5)).margins(Insets.vertical(2));
             row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-            row.child(Components.label(Text.literal(zone.id)).sizing(Sizing.fixed(100)));
-            row.child(Components.label(Text.literal(zone.active ? "ACTIVE" : "INACTIVE"))
-                    .color(zone.active ? Color.ofRgb(0x00FF00) : Color.ofRgb(0xAAAAAA))
-                    .sizing(Sizing.fixed(60)));
+            // Zone ID
+            row.child(Components.label(Text.literal(zone.id)).sizing(Sizing.fixed(120)));
             
-            row.child(Components.label(Text.literal("Players: " + zone.nearbyPlayers)).sizing(Sizing.fixed(80)));
+            // Status
+            String statusText = zone.enabled ? (zone.active ? "ACTIVE" : "INACTIVE") : "DISABLED";
+            int statusColor = zone.enabled ? (zone.active ? 0x00FF00 : 0xAAAAAA) : 0xFF0000;
+            row.child(Components.label(Text.literal(statusText))
+                    .color(Color.ofRgb(statusColor))
+                    .sizing(Sizing.fixed(70)));
+            
+            // Players nearby
+            row.child(Components.label(Text.literal("Players: " + zone.nearbyPlayers))
+                    .color(Color.ofRgb(zone.nearbyPlayers > 0 ? 0xFFFFFF : 0x888888))
+                    .sizing(Sizing.fixed(80)));
+            
+            // Alive mobs
+            row.child(Components.label(Text.literal("Alive: " + zone.primaryAliveTotal))
+                    .color(Color.ofRgb(zone.primaryAliveTotal > 0 ? 0x00FFFF : 0x888888))
+                    .sizing(Sizing.fixed(70)));
 
+            // Details button
             row.child(Components.button(Text.literal("Details"), button -> {
                 MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot));
             }).margins(Insets.left(5)));
 
+            // Force Spawn button
             row.child(Components.button(Text.literal("Force Spawn"), button -> {
-                // To be implemented: SEND RUN_ZONE_ACTION
-            }).margins(Insets.left(10)));
+                MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
+                    Text.literal("Force Spawn Zone"),
+                    Text.literal("Force spawn mobs for all rules in zone: " + zone.id),
+                    () -> {
+                        PacketByteBuf buf = PacketByteBufs.create();
+                        buf.writeString("FORCE_SPAWN");
+                        buf.writeString(zone.id);
+                        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
+                    }
+                ));
+            }).margins(Insets.left(5)));
 
             zonesList.child(row);
         }

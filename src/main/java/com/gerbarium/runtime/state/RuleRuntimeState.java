@@ -13,6 +13,7 @@ public class RuleRuntimeState {
     public int lastEncounterCompanionsSpawned;
 
     public long lastActivationSpawnAt;
+    public long lastOnActivationAttemptActivationId;
 
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
@@ -31,6 +32,9 @@ public class RuleRuntimeState {
     public long lastTimedTickAt;
     public long nextTimedSpawnInMillis;
     public int timedSpawnedThisActivation;
+    public long timedBudgetActivationId;
+    public long lastTimedBudgetResetAt;
+    public boolean timedBudgetExhausted;
 
     public int knownAlive;
 

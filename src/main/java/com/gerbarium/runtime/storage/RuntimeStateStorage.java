@@ -28,6 +28,10 @@ public class RuntimeStateStorage {
     private static final Map<String, ZoneStateFile> states = new ConcurrentHashMap<>();
     private static final Set<String> dirtyZoneIds = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static long lastSaveTime = 0;
+    
+    // Event rate limiting: key = zoneId:ruleId:type, value = last event time
+    private static final Map<String, Long> lastEventTimes = new ConcurrentHashMap<>();
+    private static final long EVENT_RATE_LIMIT_MILLIS = 60000; // 60 seconds
 
     public static ZoneStateFile getZoneState(String zoneId) {
         return states.computeIfAbsent(zoneId, id -> {
@@ -131,6 +135,21 @@ public class RuntimeStateStorage {
     }
 
     public static void addEvent(String zoneId, String ruleId, String type, String message) {
+        // Rate limit repeated skip events
+        boolean isSkipEvent = type.startsWith("SKIPPED_");
+        if (isSkipEvent) {
+            String key = zoneId + ":" + (ruleId != null ? ruleId : "null") + ":" + type;
+            Long lastTime = lastEventTimes.get(key);
+            long now = System.currentTimeMillis();
+            
+            if (lastTime != null && (now - lastTime) < EVENT_RATE_LIMIT_MILLIS) {
+                // Skip this event, too soon
+                return;
+            }
+            
+            lastEventTimes.put(key, now);
+        }
+        
         ZoneStateFile zf = getZoneState(zoneId);
         zf.recentEvents.add(0, new RuntimeEvent(System.currentTimeMillis(), zoneId, ruleId, type, message));
         if (zf.recentEvents.size() > 200) {

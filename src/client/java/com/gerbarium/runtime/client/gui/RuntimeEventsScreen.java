@@ -20,6 +20,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
     private final Screen parent;
     private final RuntimeSnapshotDto snapshot;
     private FlowLayout eventsList;
+    private FlowLayout filterBar;
     
     private String typeFilter = "ALL";
     private String zoneFilter = "ALL";
@@ -42,7 +43,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
 
         // Header
         FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        header.child(Components.label(Text.literal("Event Log")));
+        header.child(Components.label(Text.literal("Event Log (" + snapshot.recentEventsCount + " total)")));
         header.child(Components.button(Text.literal("Back"), button -> {
             this.client.setScreen(parent);
         }).margins(Insets.left(20)));
@@ -50,22 +51,9 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
         rootComponent.child(header.margins(Insets.bottom(10)));
 
         // Filters
-        FlowLayout filters = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        filters.child(Components.label(Text.literal("Type: ")));
-        filters.child(Components.button(Text.literal(typeFilter), button -> {
-            cycleTypeFilter();
-            button.setMessage(Text.literal(typeFilter));
-            rebuildEventsList();
-        }).margins(Insets.right(10)));
-
-        filters.child(Components.label(Text.literal("Zone: ")));
-        filters.child(Components.button(Text.literal(zoneFilter), button -> {
-            cycleZoneFilter();
-            button.setMessage(Text.literal(zoneFilter));
-            rebuildEventsList();
-        }));
-        
-        rootComponent.child(filters.margins(Insets.bottom(10)));
+        filterBar = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        rebuildFilterBar();
+        rootComponent.child(filterBar.margins(Insets.bottom(10)));
 
         // Events List
         eventsList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
@@ -74,10 +62,30 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
         rebuildEventsList();
     }
 
+    private void rebuildFilterBar() {
+        filterBar.clearChildren();
+        
+        filterBar.child(Components.label(Text.literal("Type: ")));
+        filterBar.child(Components.button(Text.literal(typeFilter), button -> {
+            cycleTypeFilter();
+            button.setMessage(Text.literal(typeFilter));
+            rebuildEventsList();
+        }).margins(Insets.right(10)));
+
+        filterBar.child(Components.label(Text.literal("Zone: ")));
+        filterBar.child(Components.button(Text.literal(zoneFilter), button -> {
+            cycleZoneFilter();
+            button.setMessage(Text.literal(zoneFilter));
+            rebuildEventsList();
+        }));
+    }
+
     private void cycleTypeFilter() {
         if ("ALL".equals(typeFilter)) typeFilter = "SPAWN";
         else if ("SPAWN".equals(typeFilter)) typeFilter = "ERROR";
         else if ("ERROR".equals(typeFilter)) typeFilter = "ACTIVATION";
+        else if ("ACTIVATION".equals(typeFilter)) typeFilter = "UNIQUE";
+        else if ("UNIQUE".equals(typeFilter)) typeFilter = "COOLDOWN";
         else typeFilter = "ALL";
     }
 
@@ -105,25 +113,42 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
                 .filter(e -> "ALL".equals(zoneFilter) || e.zoneId.equals(zoneFilter))
                 .collect(Collectors.toList());
 
+        if (filtered.isEmpty()) {
+            eventsList.child(Components.label(Text.literal("No events match the current filters"))
+                    .color(Color.ofRgb(0xFFFF00)));
+            return;
+        }
+
         for (var event : filtered) {
             FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
             row.surface(Surface.PANEL).padding(Insets.of(5)).margins(Insets.vertical(1));
             row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
             String timeStr = TimeUtil.formatRelative(event.time);
-            row.child(Components.label(Text.literal("[" + timeStr + "] ")).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(120)));
-            row.child(Components.label(Text.literal(event.type)).color(getEventColor(event.type)).sizing(Sizing.fixed(80)));
-            row.child(Components.label(Text.literal(event.zoneId + ": ")).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(80)));
+            row.child(Components.label(Text.literal(timeStr)).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(120)));
+            row.child(Components.label(Text.literal(event.type)).color(getEventColor(event.type)).sizing(Sizing.fixed(120)));
+            row.child(Components.label(Text.literal(event.zoneId)).color(Color.ofRgb(0x00FFFF)).sizing(Sizing.fixed(100)));
+            
+            if (event.ruleId != null && !event.ruleId.isEmpty()) {
+                row.child(Components.label(Text.literal(event.ruleId)).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(80)));
+            }
+            
             row.child(Components.label(Text.literal(event.message)));
 
             eventsList.child(row);
         }
+        
+        eventsList.child(Components.label(Text.literal("Showing " + filtered.size() + " of " + snapshot.recentEventsCount + " events"))
+                .color(Color.ofRgb(0x888888))
+                .margins(Insets.top(10)));
     }
 
     private Color getEventColor(String type) {
-        if (type.contains("ERROR")) return Color.ofRgb(0xFF0000);
-        if (type.contains("SPAWN")) return Color.ofRgb(0x00FF00);
-        if (type.contains("ACTIVATION")) return Color.ofRgb(0x00FFFF);
+        if (type.contains("ERROR") || type.contains("FAILED")) return Color.ofRgb(0xFF0000);
+        if (type.contains("SUCCESS") || type.contains("SPAWN")) return Color.ofRgb(0x00FF00);
+        if (type.contains("ACTIVATION") || type.contains("DEACTIVATION")) return Color.ofRgb(0x00FFFF);
+        if (type.contains("UNIQUE") || type.contains("ENCOUNTER")) return Color.ofRgb(0xFFFF00);
+        if (type.contains("COOLDOWN") || type.contains("RESET")) return Color.ofRgb(0xFF00FF);
         return Color.ofRgb(0xFFFFFF);
     }
 }

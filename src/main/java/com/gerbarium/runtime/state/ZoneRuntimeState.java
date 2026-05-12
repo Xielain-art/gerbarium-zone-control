@@ -13,6 +13,7 @@ public class ZoneRuntimeState {
     public long lastPlayerSeenAtMillis = 0;
     public List<ServerPlayerEntity> nearbyPlayers = new ArrayList<>();
     public boolean firstSpawnDelayPassed = false;
+    public long activationId = 0;
 
     public ZoneRuntimeState(String zoneId) {
         this.zoneId = zoneId;

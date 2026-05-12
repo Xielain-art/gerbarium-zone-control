@@ -11,6 +11,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.registry.Registries;
@@ -42,6 +43,13 @@ public class EntitySpawnService {
         MobTagger.tagPrimary(entity, zone.id, rule.id, forced);
         if (world.spawnEntity(entity)) {
             MobTracker.incrementPrimary(zone.id, rule.id);
+            
+            // Announce spawn if configured
+            if (rule.announceOnSpawn && !forced) {
+                String message = "[Gerbarium] " + rule.name + " spawned in zone " + zone.id;
+                world.getServer().getPlayerManager().broadcast(Text.literal(message), false);
+            }
+            
             spawnCompanions(world, zone, rule, entity, forced);
             return SpawnResult.SUCCESS;
         }
@@ -83,6 +91,7 @@ public class EntitySpawnService {
 
                 MobTagger.tagCompanion(entity, zone.id, parentRule.id, companion.id, forced);
                 if (world.spawnEntity(entity)) {
+                    MobTracker.incrementCompanion(zone.id, parentRule.id);
                     spawnedCount++;
                 }
             }
