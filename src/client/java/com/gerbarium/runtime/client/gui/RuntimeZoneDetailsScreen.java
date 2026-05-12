@@ -13,10 +13,12 @@ import org.jetbrains.annotations.NotNull;
 public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
     private final Screen parent;
     private final ZoneSummaryDto zone;
+    private final com.gerbarium.runtime.client.dto.RuntimeSnapshotDto snapshot;
 
-    public RuntimeZoneDetailsScreen(Screen parent, ZoneSummaryDto zone) {
+    public RuntimeZoneDetailsScreen(Screen parent, ZoneSummaryDto zone, com.gerbarium.runtime.client.dto.RuntimeSnapshotDto snapshot) {
         this.parent = parent;
         this.zone = zone;
+        this.snapshot = snapshot;
     }
 
     @Override
@@ -36,6 +38,10 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
         header.child(Components.button(Text.literal("Back"), button -> {
             this.client.setScreen(parent);
         }).margins(Insets.left(20)));
+
+        header.child(Components.button(Text.literal("Zone Events"), button -> {
+            this.client.setScreen(new RuntimeEventsScreen(this, snapshot));
+        }).margins(Insets.left(10)));
         
         rootComponent.child(header.margins(Insets.bottom(15)));
 

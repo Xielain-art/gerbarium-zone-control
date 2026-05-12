@@ -55,6 +55,12 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
                 }
             ));
         }).margins(Insets.left(5)));
+
+        header.child(Components.button(Text.literal("Events Log"), button -> {
+            if (snapshot != null) {
+                MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot));
+            }
+        }).margins(Insets.left(20)));
         
         rootComponent.child(header.margins(Insets.bottom(10)));
 
@@ -84,7 +90,7 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
             row.child(Components.label(Text.literal("Players: " + zone.nearbyPlayers)).sizing(Sizing.fixed(80)));
 
             row.child(Components.button(Text.literal("Details"), button -> {
-                MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone));
+                MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot));
             }).margins(Insets.left(5)));
 
             row.child(Components.button(Text.literal("Force Spawn"), button -> {

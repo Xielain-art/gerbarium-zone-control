@@ -12,4 +12,5 @@ public class RuntimeSnapshotDto {
     public int managedCompanionCount;
     public int recentEventsCount;
     public List<ZoneSummaryDto> zones = new ArrayList<>();
+    public List<RuntimeEventDto> recentEvents = new ArrayList<>();
 }

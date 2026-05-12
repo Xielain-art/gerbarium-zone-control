@@ -8,6 +8,7 @@ import com.gerbarium.runtime.permission.PermissionUtil;
 import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
 import com.gerbarium.runtime.tracking.MobTracker;
+import com.gerbarium.runtime.client.dto.RuntimeEventDto;
 import com.gerbarium.runtime.client.dto.RuleSummaryDto;
 import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
 import com.gerbarium.runtime.client.dto.ZoneSummaryDto;
@@ -19,6 +20,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 public class GerbariumRuntimeServerNetworking {
     private static final Gson GSON = new Gson();
@@ -63,6 +65,7 @@ public class GerbariumRuntimeServerNetworking {
         dto.enabledZones = ZoneRepository.getEnabledZones().size();
         
         dto.zones = new ArrayList<>();
+        List<RuntimeEventDto> allEvents = new ArrayList<>();
         for (Zone zone : all) {
             ZoneSummaryDto z = new ZoneSummaryDto();
             z.id = zone.id;
@@ -81,6 +84,17 @@ public class GerbariumRuntimeServerNetworking {
             z.maxY = zone.max.y;
             z.maxZ = zone.max.z;
 
+            var zf = com.gerbarium.runtime.storage.RuntimeStateStorage.getZoneState(zone.id);
+            for (var event : zf.recentEvents) {
+                RuntimeEventDto ed = new RuntimeEventDto();
+                ed.time = event.time;
+                ed.zoneId = event.zoneId;
+                ed.ruleId = event.ruleId;
+                ed.type = event.type;
+                ed.message = event.message;
+                allEvents.add(ed);
+            }
+
             for (MobRule rule : zone.mobs) {
                 RuleSummaryDto rs = new RuleSummaryDto();
                 rs.id = rule.id;
@@ -96,7 +110,6 @@ public class GerbariumRuntimeServerNetworking {
                 rs.chance = rule.chance;
                 rs.cooldownStart = rule.cooldownStart.name();
 
-                var zf = com.gerbarium.runtime.storage.RuntimeStateStorage.getZoneState(zone.id);
                 var ruleState = zf.rules.get(rule.id);
                 if (ruleState != null) {
                     rs.active = rule.enabled;
@@ -114,6 +127,10 @@ public class GerbariumRuntimeServerNetworking {
             
             dto.zones.add(z);
         }
+
+        allEvents.sort((a, b) -> Long.compare(b.time, a.time));
+        dto.recentEvents = allEvents.stream().limit(100).toList();
+        dto.recentEventsCount = allEvents.size();
 
         return dto;
     }

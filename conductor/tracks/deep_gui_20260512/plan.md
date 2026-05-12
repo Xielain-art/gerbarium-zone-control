@@ -24,15 +24,15 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: RuleDetails Screen Implementation' (Protocol in workflow.md)
 
 ## Phase 3: EventsScreen (Event Log) Implementation
-- [ ] Task: Implement EventsScreen basic layout and event list
-    - [ ] Setup `owo-lib` UI model layout for EventsScreen.
-    - [ ] Create a scrollable, paginated list component for chronological events.
-    - [ ] Apply color coding based on event types (errors in red, success in green, etc.).
-- [ ] Task: Implement filtering UI and logic
-    - [ ] Add UI controls for event type filtering.
-    - [ ] Add UI controls for zone filtering.
-    - [ ] Connect filters to dynamically update the event list.
-- [ ] Task: Write verification checks/tests for EventsScreen rendering and filtering
+- [x] Task: Implement EventsScreen basic layout and event list
+    - [x] Setup `owo-lib` UI model layout for EventsScreen.
+    - [x] Create a scrollable, paginated list component for chronological events.
+    - [x] Apply color coding based on event types (errors in red, success in green, etc.).
+- [x] Task: Implement filtering UI and logic
+    - [x] Add UI controls for event type filtering.
+    - [x] Add UI controls for zone filtering.
+    - [x] Connect filters to dynamically update the event list.
+- [x] Task: Write verification checks/tests for EventsScreen rendering and filtering
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: EventsScreen (Event Log) Implementation' (Protocol in workflow.md)
 
 ## Phase 4: Integration and Final Polish
