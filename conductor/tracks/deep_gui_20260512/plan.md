@@ -35,10 +35,10 @@
 - [x] Task: Write verification checks/tests for EventsScreen rendering and filtering
 - [x] Task: Conductor - User Manual Verification 'Phase 3: EventsScreen (Event Log) Implementation' (Protocol in workflow.md)
 
-## Phase 4: Integration and Final Polish
+## Phase 4: Integration and Final Polish [checkpoint: 09ec643]
 - [x] Task: Integrate new screens with existing main list
     - [x] Hook up existing buttons in the main zone list to open ZoneDetails.
     - [x] Hook up global or per-zone "Events Log" buttons to open EventsScreen.
 - [x] Task: Verify safety constraints
     - [x] Ensure all dangerous actions within these new screens trigger the existing confirmation window.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Integration and Final Polish' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Integration and Final Polish' (Protocol in workflow.md)
