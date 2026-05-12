@@ -1,15 +1,15 @@
 # Implementation Plan: Deep GUI (owo-lib)
 
 ## Phase 1: ZoneDetails Screen Implementation
-- [ ] Task: Implement ZoneDetails screen layout and DTO integration
-    - [ ] Setup `owo-lib` UI model layout for ZoneDetails.
-    - [ ] Bind Zone DTO Runtime State data (status, player count, timers).
-    - [ ] Bind Zone DTO Config Details (bounds, priorities, dimensions).
-    - [ ] Integrate color coding logic for status indicators.
-- [ ] Task: Implement Applied Rules list within ZoneDetails
-    - [ ] Create a scrollable list component for applied rules.
-    - [ ] Add navigation buttons from applied rules to the RuleDetails screen.
-- [ ] Task: Write verification checks/tests for ZoneDetails UI components
+- [x] Task: Implement ZoneDetails screen layout and DTO integration
+    - [x] Setup `owo-lib` UI model layout for ZoneDetails.
+    - [x] Bind Zone DTO Runtime State data (status, player count, timers).
+    - [x] Bind Zone DTO Config Details (bounds, priorities, dimensions).
+    - [x] Integrate color coding logic for status indicators.
+- [x] Task: Implement Applied Rules list within ZoneDetails
+    - [x] Create a scrollable list component for applied rules.
+    - [x] Add navigation buttons from applied rules to the RuleDetails screen.
+- [x] Task: Write verification checks/tests for ZoneDetails UI components
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: ZoneDetails Screen Implementation' (Protocol in workflow.md)
 
 ## Phase 2: RuleDetails Screen Implementation

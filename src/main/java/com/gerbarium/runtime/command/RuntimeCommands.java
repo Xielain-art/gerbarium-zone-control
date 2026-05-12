@@ -4,6 +4,7 @@ import com.gerbarium.runtime.admin.ActionResultDto;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
 import com.gerbarium.runtime.admin.RuntimeQueryService;
 import com.gerbarium.runtime.network.GerbariumRuntimePackets;
+import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.permission.PermissionUtil;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneRepository;
@@ -13,6 +14,10 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.Text;
+
+import java.util.Collection;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -116,7 +121,7 @@ public class RuntimeCommands {
                 .then(literal("state")
                     .then(literal("save")
                         .executes(context -> {
-                            RuntimeStateStorage.save();
+                            RuntimeStateStorage.saveAllDirty();
                             context.getSource().sendFeedback(() -> Text.literal("Runtime state saved to disk."), true);
                             return 1;
                         })

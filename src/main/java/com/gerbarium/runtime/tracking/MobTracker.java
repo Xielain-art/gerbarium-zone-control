@@ -1,5 +1,5 @@
 package com.gerbarium.runtime.tracking;
-
+import com.gerbarium.runtime.mixin.EntityPersistentDataHolder;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;
@@ -29,7 +29,7 @@ public class MobTracker {
     }
 
     private static void onEntityDeath(LivingEntity entity) {
-        if (entity.getPersistentData().getBoolean(MobTagger.TAG_CLEANUP)) {
+        if (((EntityPersistentDataHolder) entity).getPersistentData().getBoolean(MobTagger.TAG_CLEANUP)) {
             decrementAny(entity);
             return;
         }

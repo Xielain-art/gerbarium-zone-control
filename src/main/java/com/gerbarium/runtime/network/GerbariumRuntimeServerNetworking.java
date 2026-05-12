@@ -2,11 +2,13 @@ package com.gerbarium.runtime.network;
 
 import com.gerbarium.runtime.admin.ActionResultDto;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
+import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.permission.PermissionUtil;
 import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
 import com.gerbarium.runtime.tracking.MobTracker;
+import com.gerbarium.runtime.client.dto.RuleSummaryDto;
 import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
 import com.gerbarium.runtime.client.dto.ZoneSummaryDto;
 import com.google.gson.Gson;
@@ -70,7 +72,26 @@ public class GerbariumRuntimeServerNetworking {
             var zState = ZoneActivationManager.getZoneState(zone.id);
             z.active = zState.active;
             z.nearbyPlayers = zState.nearbyPlayers.size();
-            z.primaryAliveTotal = 0; // Simplified for MVP
+            z.primaryAliveTotal = MobTracker.getPrimaryAliveCount(zone.id, ""); // Placeholder for total primary alive
+            
+            z.minX = zone.min.x;
+            z.minY = zone.min.y;
+            z.minZ = zone.min.z;
+            z.maxX = zone.max.x;
+            z.maxY = zone.max.y;
+            z.maxZ = zone.max.z;
+
+            for (MobRule rule : zone.mobs) {
+                RuleSummaryDto rs = new RuleSummaryDto();
+                rs.id = rule.id;
+                rs.name = rule.name;
+                rs.entity = rule.entity;
+                rs.spawnType = rule.spawnType.name();
+                rs.maxAlive = rule.maxAlive;
+                rs.aliveCount = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
+                rs.active = true; // Simplified
+                z.rules.add(rs);
+            }
             
             dto.zones.add(z);
         }

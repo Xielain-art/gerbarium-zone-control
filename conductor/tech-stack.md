@@ -7,7 +7,7 @@
 ## Libraries & Frameworks
 - **Fabric API:** Core hooks and utilities for interacting with Minecraft's base code.
 - **owo-lib:** A powerful utility library for creating robust, data-driven GUI screens within Minecraft.
-- **Gson:** Standard library for parsing and serializing the zone and runtime state JSON configuration files.
+- **JUnit 5:** The standard testing framework for Java, used for unit and integration testing.
 
 ## Build System
 - **Gradle (Fabric Loom):** Manages dependencies, build tasks, and mixin compilation for seamless mod development.

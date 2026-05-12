@@ -5,7 +5,9 @@ import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.network.GerbariumRuntimeServerNetworking;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneLoader;
+import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.RuntimeTickHandler;
+import com.gerbarium.runtime.tracking.MobTracker;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import org.slf4j.Logger;
@@ -21,7 +23,7 @@ public class GerbariumRegionsRuntime implements ModInitializer {
 
         // Load Config and State
         RuntimeConfigStorage.load();
-        RuntimeStateStorage.load();
+        // RuntimeStateStorage.load(); // Removed as loadAll is called later
 
         // Register Commands and Networking
         RuntimeCommands.register();
@@ -36,7 +38,7 @@ public class GerbariumRegionsRuntime implements ModInitializer {
         });
 
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            RuntimeStateStorage.save();
+            RuntimeStateStorage.saveAllDirty();
         });
 
         LOGGER.info("Gerbarium Regions Runtime initialized.");

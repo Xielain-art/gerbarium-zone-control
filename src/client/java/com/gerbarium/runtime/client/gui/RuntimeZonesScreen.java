@@ -28,19 +28,19 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
     }
 
     @Override
-    protected @NotNull FlowLayout createAdapter() {
-        return Containers.verticalFlow(Sizing.fill(100), Sizing.fill(100));
+    protected @NotNull io.wispforest.owo.ui.core.OwoUIAdapter<FlowLayout> createAdapter() {
+        return io.wispforest.owo.ui.core.OwoUIAdapter.create(this, Containers::verticalFlow);
     }
 
     @Override
     protected void build(FlowLayout rootComponent) {
         rootComponent.surface(Surface.VANILLA_TRANSLUCENT)
                 .padding(Insets.of(20))
-                .alignment(VerticalAlignment.TOP, HorizontalAlignment.CENTER);
+                .alignment(HorizontalAlignment.CENTER, VerticalAlignment.TOP);
 
         // Header
         FlowLayout header = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        header.child(Components.label(Text.literal("Gerbarium Regions Runtime")).fontWeight(700).fontSize(16));
+        header.child(Components.label(Text.literal("Gerbarium Regions Runtime")));
         header.child(Components.button(Text.literal("Refresh"), button -> {
             ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
         }).margins(Insets.left(20)));
@@ -74,7 +74,7 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
         for (ZoneSummaryDto zone : snapshot.zones) {
             FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
             row.surface(Surface.PANEL).padding(Insets.of(5)).margins(Insets.vertical(2));
-            row.alignment(VerticalAlignment.CENTER, HorizontalAlignment.LEFT);
+            row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
             row.child(Components.label(Text.literal(zone.id)).sizing(Sizing.fixed(100)));
             row.child(Components.label(Text.literal(zone.active ? "ACTIVE" : "INACTIVE"))
@@ -82,6 +82,10 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> {
                     .sizing(Sizing.fixed(60)));
             
             row.child(Components.label(Text.literal("Players: " + zone.nearbyPlayers)).sizing(Sizing.fixed(80)));
+
+            row.child(Components.button(Text.literal("Details"), button -> {
+                MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone));
+            }).margins(Insets.left(5)));
 
             row.child(Components.button(Text.literal("Force Spawn"), button -> {
                 // To be implemented: SEND RUN_ZONE_ACTION

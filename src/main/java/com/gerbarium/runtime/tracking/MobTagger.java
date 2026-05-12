@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.tracking;
 
+import com.gerbarium.runtime.mixin.EntityPersistentDataHolder;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 
@@ -16,7 +17,7 @@ public class MobTagger {
     public static final String TAG_CLEANUP = "gerbarium_cleanup_active";
 
     public static void tagPrimary(Entity entity, String zoneId, String ruleId, boolean forced) {
-        NbtCompound nbt = entity.getPersistentData();
+        NbtCompound nbt = ((EntityPersistentDataHolder) entity).getPersistentData();
         nbt.putBoolean(TAG_MANAGED, true);
         nbt.putString(TAG_ZONE_ID, zoneId);
         nbt.putString(TAG_RULE_ID, ruleId);
@@ -25,7 +26,7 @@ public class MobTagger {
     }
 
     public static void tagCompanion(Entity entity, String zoneId, String parentRuleId, String companionId, boolean forced) {
-        NbtCompound nbt = entity.getPersistentData();
+        NbtCompound nbt = ((EntityPersistentDataHolder) entity).getPersistentData();
         nbt.putBoolean(TAG_MANAGED, true);
         nbt.putString(TAG_ZONE_ID, zoneId);
         nbt.putString(TAG_RULE_ID, parentRuleId); // Rule ID for companions is parent rule ID
@@ -36,7 +37,7 @@ public class MobTagger {
     }
 
     public static Optional<ManagedMobInfo> getInfo(Entity entity) {
-        NbtCompound nbt = entity.getPersistentData();
+        NbtCompound nbt = ((EntityPersistentDataHolder) entity).getPersistentData();
         if (!nbt.getBoolean(TAG_MANAGED)) {
             return Optional.empty();
         }

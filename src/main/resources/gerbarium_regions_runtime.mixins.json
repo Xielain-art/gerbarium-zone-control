@@ -3,7 +3,8 @@
 	"package": "com.gerbarium.runtime.mixin",
 	"compatibilityLevel": "JAVA_17",
 	"mixins": [
-		"MinecraftServerMixin"
+		"MinecraftServerMixin",
+		"EntityMixin"
 	],
 	"client": [],
 	"injectors": {
