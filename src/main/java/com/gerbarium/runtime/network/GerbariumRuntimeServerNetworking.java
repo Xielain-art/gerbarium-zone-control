@@ -89,7 +89,26 @@ public class GerbariumRuntimeServerNetworking {
                 rs.spawnType = rule.spawnType.name();
                 rs.maxAlive = rule.maxAlive;
                 rs.aliveCount = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
-                rs.active = true; // Simplified
+                
+                rs.refillMode = rule.refillMode.name();
+                rs.spawnCount = rule.spawnCount;
+                rs.respawnSeconds = rule.respawnSeconds;
+                rs.chance = rule.chance;
+                rs.cooldownStart = rule.cooldownStart.name();
+
+                var zf = com.gerbarium.runtime.storage.RuntimeStateStorage.getZoneState(zone.id);
+                var ruleState = zf.rules.get(rule.id);
+                if (ruleState != null) {
+                    rs.active = rule.enabled;
+                    rs.lastAttemptAt = ruleState.lastAttemptAt;
+                    rs.lastAttemptResult = ruleState.lastAttemptResult;
+                    rs.lastAttemptReason = ruleState.lastAttemptReason;
+                    rs.lastSuccessAt = ruleState.lastSuccessAt;
+                    rs.nextAvailableAt = ruleState.nextAvailableAt;
+                    rs.totalAttempts = ruleState.totalAttempts;
+                    rs.totalSuccesses = ruleState.totalSuccesses;
+                }
+                
                 z.rules.add(rs);
             }
             

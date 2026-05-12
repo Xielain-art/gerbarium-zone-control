@@ -20,10 +20,14 @@ public class ZoneDetailsTest {
         RuleSummaryDto rule = new RuleSummaryDto();
         rule.id = "test-rule";
         rule.maxAlive = 5;
+        rule.respawnSeconds = 900;
+        rule.chance = 0.5;
         zone.rules.add(rule);
         
         assertEquals(1, zone.rules.size());
         assertEquals("test-rule", zone.rules.get(0).id);
         assertEquals(5, zone.rules.get(0).maxAlive);
+        assertEquals(900, zone.rules.get(0).respawnSeconds);
+        assertEquals(0.5, zone.rules.get(0).chance);
     }
 }

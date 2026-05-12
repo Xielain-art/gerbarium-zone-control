@@ -65,7 +65,7 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> {
             ruleRow.child(Components.label(Text.literal(rule.aliveCount + "/" + rule.maxAlive + " alive")));
             
             ruleRow.child(Components.button(Text.literal("Rule Details"), button -> {
-                // To be implemented in Phase 2
+                this.client.setScreen(new RuntimeRuleDetailsScreen(this, rule));
             }).margins(Insets.left(10)).sizing(Sizing.content()));
             
             details.child(ruleRow.margins(Insets.vertical(1)));

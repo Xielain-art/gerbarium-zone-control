@@ -13,14 +13,14 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: ZoneDetails Screen Implementation' (Protocol in workflow.md)
 
 ## Phase 2: RuleDetails Screen Implementation
-- [ ] Task: Implement RuleDetails screen layout and DTO integration
-    - [ ] Setup `owo-lib` UI model layout for RuleDetails.
-    - [ ] Bind Rule Config Details (type, conditions, weights, mob types).
-    - [ ] Bind Cooldown Status and Trigger Statistics.
-    - [ ] Apply color coding for cooldowns and stats.
-- [ ] Task: Implement navigation components
-    - [ ] Add a functional "Back" button to return to ZoneDetails.
-- [ ] Task: Write verification checks/tests for RuleDetails UI components
+- [x] Task: Implement RuleDetails screen layout and DTO integration
+    - [x] Setup `owo-lib` UI model layout for RuleDetails.
+    - [x] Bind Rule Config Details (type, conditions, weights, mob types).
+    - [x] Bind Cooldown Status and Trigger Statistics.
+    - [x] Apply color coding for cooldowns and stats.
+- [x] Task: Implement navigation components
+    - [x] Add a functional "Back" button to return to ZoneDetails.
+- [x] Task: Write verification checks/tests for RuleDetails UI components
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: RuleDetails Screen Implementation' (Protocol in workflow.md)
 
 ## Phase 3: EventsScreen (Event Log) Implementation
