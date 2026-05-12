@@ -8,7 +8,7 @@ The Gerbarium Regions Runtime is a high-performance Fabric 1.20.1 Minecraft mod 
 
 ## Core Features
 - **Dynamic Spawning:** Advanced mechanics for spawning PACKs of mobs with anti-farm logic and UNIQUE boss encounters where cooldown begins only after the boss and its companions are fully cleared.
-- **Admin GUI:** A comprehensive, read-only interface built with `owo-lib` for monitoring zone states, schedules, and active encounters.
+- **Admin GUI:** A comprehensive management interface built with `owo-lib` for monitoring zone states, schedules, historical events, and performing administrative actions.
 - **Proximity Logic:** Intelligent proximity-based zone activation to drastically save server resources by only ticking logic for areas with active players.
 
 ## Performance & Scale
