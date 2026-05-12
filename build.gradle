@@ -13,6 +13,9 @@ base {
 repositories {
 	// Fabric Loom сам добавляет основные репозитории для Minecraft/Fabric.
 	// Сюда добавляй Maven-репозитории только если подключаешь сторонние моды/библиотеки.
+	maven {
+		url = "https://maven.wispforest.io/releases/"
+	}
 }
 
 loom {
@@ -34,6 +37,8 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	modImplementation "io.wispforest:owo-lib:0.11.2+1.20"
 }
 
 processResources {

@@ -1,6 +1,6 @@
-package com.gerbarium.template.mixin;
+package com.gerbarium.runtime.mixin;
 
-import com.gerbarium.template.GerbariumTemplateMod;
+import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServerMixin {
     @Inject(method = "loadWorld", at = @At("HEAD"))
-    private void gerbariumTemplate$onLoadWorld(CallbackInfo ci) {
-        GerbariumTemplateMod.LOGGER.info("MinecraftServer.loadWorld() was called. Gerbarium mixin works!");
+    private void gerbariumRuntime$onLoadWorld(CallbackInfo ci) {
+        GerbariumRegionsRuntime.LOGGER.info("MinecraftServer.loadWorld() was called. Gerbarium Runtime mixin works!");
     }
 }

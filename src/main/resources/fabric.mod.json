@@ -2,30 +2,31 @@
 	"schemaVersion": 1,
 	"id": "${mod_id}",
 	"version": "${version}",
-	"name": "Gerbarium Template",
-	"description": "Base Fabric mod template for Gerbarium Minecraft 1.20.1 mods.",
+	"name": "Gerbarium Regions Runtime",
+	"description": "Runtime for Gerbarium Regions that manages spawning and activation logic.",
 	"authors": [
 		"Ratmir Klimov"
 	],
 	"contact": {},
 	"license": "All Rights Reserved",
-	"icon": "assets/gerbarium_template/icon.png",
+	"icon": "assets/gerbarium_regions_runtime/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.gerbarium.template.GerbariumTemplateMod"
+			"com.gerbarium.runtime.GerbariumRegionsRuntime"
 		],
 		"client": [
-			"com.gerbarium.template.client.GerbariumTemplateClient"
+			"com.gerbarium.runtime.client.GerbariumRegionsRuntimeClient"
 		]
 	},
 	"mixins": [
-		"gerbarium_template.mixins.json"
+		"gerbarium_regions_runtime.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.15.11",
 		"minecraft": "1.20.1",
 		"java": ">=17",
-		"fabric-api": "*"
+		"fabric-api": "*",
+		"owo": "*"
 	}
 }
