@@ -28,6 +28,7 @@ public class RuleRuntimeState {
     public long nextAvailableAt;
 
     public long timedProgressMillis;
+    public long lastTimedTickAt;
     public long nextTimedSpawnInMillis;
 
     public int knownAlive;

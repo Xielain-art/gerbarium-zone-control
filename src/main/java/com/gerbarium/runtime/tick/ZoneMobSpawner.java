@@ -60,12 +60,18 @@ public class ZoneMobSpawner {
         if (!zState.firstSpawnDelayPassed) return 0;
 
         RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
-
         long now = System.currentTimeMillis();
-        long cooldown = Math.max(zone.activation.reactivationCooldownSeconds, rule.respawnSeconds) * 1000L;
 
-        if (now - state.lastActivationSpawnAt < cooldown) {
-            return 0;
+        if (rule.refillMode == com.gerbarium.runtime.model.RefillMode.TIMED) {
+            if (!TimedSpawnLogic.shouldSpawn(now, rule, state)) {
+                return 0;
+            }
+        } else {
+            // Default ON_ACTIVATION logic
+            long cooldown = Math.max(zone.activation.reactivationCooldownSeconds, rule.respawnSeconds) * 1000L;
+            if (now - state.lastActivationSpawnAt < cooldown) {
+                return 0;
+            }
         }
 
         int alive = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
