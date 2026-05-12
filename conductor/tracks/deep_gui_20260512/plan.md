@@ -12,7 +12,7 @@
 - [x] Task: Write verification checks/tests for ZoneDetails UI components
 - [x] Task: Conductor - User Manual Verification 'Phase 1: ZoneDetails Screen Implementation' (Protocol in workflow.md)
 
-## Phase 2: RuleDetails Screen Implementation
+## Phase 2: RuleDetails Screen Implementation [checkpoint: 11db617]
 - [x] Task: Implement RuleDetails screen layout and DTO integration
     - [x] Setup `owo-lib` UI model layout for RuleDetails.
     - [x] Bind Rule Config Details (type, conditions, weights, mob types).
@@ -21,7 +21,7 @@
 - [x] Task: Implement navigation components
     - [x] Add a functional "Back" button to return to ZoneDetails.
 - [x] Task: Write verification checks/tests for RuleDetails UI components
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: RuleDetails Screen Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: RuleDetails Screen Implementation' (Protocol in workflow.md)
 
 ## Phase 3: EventsScreen (Event Log) Implementation
 - [ ] Task: Implement EventsScreen basic layout and event list
