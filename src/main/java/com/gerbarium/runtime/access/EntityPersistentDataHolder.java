@@ -1,4 +1,4 @@
-package com.gerbarium.runtime.mixin;
+package com.gerbarium.runtime.access;
 
 import net.minecraft.nbt.NbtCompound;
 

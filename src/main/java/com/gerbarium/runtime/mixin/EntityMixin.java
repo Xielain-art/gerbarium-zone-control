@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.mixin;
 
+import com.gerbarium.runtime.access.EntityPersistentDataHolder;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import org.spongepowered.asm.mixin.Mixin;

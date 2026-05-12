@@ -10,6 +10,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
+import com.gerbarium.runtime.util.TimeUtil;
 
 public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> {
     private final Screen parent;
@@ -72,7 +73,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> {
         details.child(Components.label(Text.literal("Cooldown Status")).margins(Insets.vertical(5)));
         long now = System.currentTimeMillis();
         boolean onCooldown = rule.nextAvailableAt > now;
-        String cooldownText = onCooldown ? "WAITING (" + ((rule.nextAvailableAt - now) / 1000) + "s)" : "READY";
+        String cooldownText = onCooldown ? "WAITING (" + TimeUtil.formatRelative(rule.nextAvailableAt, now) + ")" : "READY";
         details.child(createDetailRow("Status", cooldownText, onCooldown ? 0xFFFF00 : 0x00FF00));
         details.child(createDetailRow("Last Result", rule.lastAttemptResult, "SUCCESS".equals(rule.lastAttemptResult) ? 0x00FF00 : ("NONE".equals(rule.lastAttemptResult) ? 0xAAAAAA : 0xFF0000)));
         details.child(createDetailRow("Last Reason", rule.lastAttemptReason, 0xAAAAAA));

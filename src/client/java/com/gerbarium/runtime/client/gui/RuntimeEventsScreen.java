@@ -11,13 +11,11 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import com.gerbarium.runtime.util.TimeUtil;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
-    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
     
     private final Screen parent;
     private final RuntimeSnapshotDto snapshot;
@@ -112,8 +110,8 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> {
             row.surface(Surface.PANEL).padding(Insets.of(5)).margins(Insets.vertical(1));
             row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
 
-            String timeStr = TIME_FORMAT.format(new Date(event.time));
-            row.child(Components.label(Text.literal("[" + timeStr + "] ")).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(60)));
+            String timeStr = TimeUtil.formatRelative(event.time);
+            row.child(Components.label(Text.literal("[" + timeStr + "] ")).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(120)));
             row.child(Components.label(Text.literal(event.type)).color(getEventColor(event.type)).sizing(Sizing.fixed(80)));
             row.child(Components.label(Text.literal(event.zoneId + ": ")).color(Color.ofRgb(0xAAAAAA)).sizing(Sizing.fixed(80)));
             row.child(Components.label(Text.literal(event.message)));

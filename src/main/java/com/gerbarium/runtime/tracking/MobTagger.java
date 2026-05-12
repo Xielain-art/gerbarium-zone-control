@@ -1,6 +1,6 @@
 package com.gerbarium.runtime.tracking;
 
-import com.gerbarium.runtime.mixin.EntityPersistentDataHolder;
+import com.gerbarium.runtime.access.EntityPersistentDataHolder;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 

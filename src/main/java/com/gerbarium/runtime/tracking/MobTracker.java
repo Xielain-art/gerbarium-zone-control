@@ -1,5 +1,5 @@
 package com.gerbarium.runtime.tracking;
-import com.gerbarium.runtime.mixin.EntityPersistentDataHolder;
+import com.gerbarium.runtime.access.EntityPersistentDataHolder;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;

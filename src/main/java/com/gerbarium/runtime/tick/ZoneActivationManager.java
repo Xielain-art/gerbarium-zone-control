@@ -93,7 +93,7 @@ public class ZoneActivationManager {
                     if (info.zoneId.equals(zone.id)) {
                         Optional<com.gerbarium.runtime.model.MobRule> rule = zone.mobs.stream().filter(m -> m.id.equals(info.ruleId)).findFirst();
                         if (rule.isPresent() && rule.get().despawnWhenZoneInactive) {
-                            ((com.gerbarium.runtime.mixin.EntityPersistentDataHolder) entity).getPersistentData().putBoolean(com.gerbarium.runtime.tracking.MobTagger.TAG_CLEANUP, true);
+                            ((com.gerbarium.runtime.access.EntityPersistentDataHolder) entity).getPersistentData().putBoolean(com.gerbarium.runtime.tracking.MobTagger.TAG_CLEANUP, true);
                             entity.discard();
                             anyDespawned = true;
                         }
