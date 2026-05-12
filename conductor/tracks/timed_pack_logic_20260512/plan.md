@@ -8,16 +8,16 @@
     - [x] Verify tests pass.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: State Persistence for TIMED Rules' (Protocol in workflow.md)
 
-## Phase 2: Active Zone Timer Logic
-- [~] Task: Implement Timer Tick Logic
-    - [ ] Write failing tests verifying timer progresses only when zone is active.
-    - [ ] Write failing tests verifying timer pauses on deactivation and resumes without catch-up.
-    - [ ] Implement `refillMode: "TIMED"` tick logic in the zone/spawner ticking system.
-    - [ ] Verify tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Active Zone Timer Logic' (Protocol in workflow.md)
+## Phase 2: Active Zone Timer Logic [checkpoint: 58f07a0]
+- [x] Task: Implement Timer Tick Logic
+    - [x] Write failing tests verifying timer progresses only when zone is active.
+    - [x] Write failing tests verifying timer pauses on deactivation and resumes without catch-up.
+    - [x] Implement `refillMode: "TIMED"` tick logic in the zone/spawner ticking system.
+    - [x] Verify tests pass.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Active Zone Timer Logic' (Protocol in workflow.md)
 
 ## Phase 3: Spawn Limits and Execution
-- [ ] Task: Implement `maxAlive` check for Primary Mobs
+- [~] Task: Implement `maxAlive` check for Primary Mobs
     - [ ] Write failing tests ensuring `TIMED` spawns are skipped if primary alive mobs >= `maxAlive`.
     - [ ] Write failing tests ensuring companions are excluded from the `maxAlive` count for `TIMED` rules.
     - [ ] Implement the count check before executing the `TIMED` spawn event.
