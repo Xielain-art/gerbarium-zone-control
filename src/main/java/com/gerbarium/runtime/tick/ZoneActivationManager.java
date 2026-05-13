@@ -31,12 +31,12 @@ public class ZoneActivationManager {
         for (Zone zone : ZoneRepository.getEnabledZones()) {
             ZoneRuntimeState zState = getZoneState(zone.id);
             List<ServerPlayerEntity> nearby = findNearbyPlayers(server, zone);
-            
+
             zState.nearbyPlayers = nearby;
 
             if (!nearby.isEmpty()) {
                 zState.lastPlayerSeenAtMillis = now;
-                
+
                 ZoneRuntimePersistentState pState = RuntimeStateStorage.getZoneState(zone.id).zone;
                 pState.lastPlayerSeenAt = now;
 
@@ -82,10 +82,7 @@ public class ZoneActivationManager {
         boolean anyDespawned = false;
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world != null) {
-            Box box = new Box(
-                    Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),
-                    Math.max(zone.min.x, zone.max.x) + 1, Math.max(zone.min.y, zone.max.y) + 1, Math.max(zone.min.z, zone.max.z) + 1
-            );
+            Box box = zone.getZoneBox();
 
             for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
                 var infoOpt = com.gerbarium.runtime.tracking.MobTagger.getInfo(entity);
@@ -111,8 +108,7 @@ public class ZoneActivationManager {
         for (com.gerbarium.runtime.model.MobRule rule : zone.mobs) {
             com.gerbarium.runtime.state.RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
             TimedSpawnLogic.resetTimer(state);
-            // Do NOT reset timedSpawnedThisActivation here - budget persists until reactivation cooldown passes
-            
+
             if (anyDespawned && rule.spawnType == com.gerbarium.runtime.model.SpawnType.UNIQUE) {
                 com.gerbarium.runtime.tracking.MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, false, true);
             }
@@ -125,12 +121,13 @@ public class ZoneActivationManager {
         List<ServerPlayerEntity> nearby = new ArrayList<>();
         String dimension = zone.dimension;
 
-        Box box = new Box(
-                Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),
-                Math.max(zone.min.x, zone.max.x), Math.max(zone.min.y, zone.max.y), Math.max(zone.min.z, zone.max.z)
-        ).expand(zone.activation.range);
+        // Use expanded zone box with +1 on max to match isInsideZone semantics (inclusive max block)
+        Box box = zone.getExpandedBox(zone.activation.range);
 
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+            if (!player.isAlive() || player.isDisconnected()) {
+                continue;
+            }
             if (player.getWorld().getRegistryKey().getValue().toString().equals(dimension)) {
                 if (box.contains(player.getPos())) {
                     nearby.add(player);

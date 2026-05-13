@@ -17,12 +17,12 @@ public class SpawnPositionFinder {
     private static final Random RANDOM = new Random();
 
     public static Optional<BlockPos> findSpawnPosition(ServerWorld world, Zone zone, List<ServerPlayerEntity> nearbyPlayers) {
-        int minX = Math.min(zone.min.x, zone.max.x);
-        int maxX = Math.max(zone.min.x, zone.max.x);
-        int minY = Math.min(zone.min.y, zone.max.y);
-        int maxY = Math.max(zone.min.y, zone.max.y);
-        int minZ = Math.min(zone.min.z, zone.max.z);
-        int maxZ = Math.max(zone.min.z, zone.max.z);
+        int minX = zone.getMinX();
+        int maxX = zone.getMaxX();
+        int minY = zone.getMinY();
+        int maxY = zone.getMaxY();
+        int minZ = zone.getMinZ();
+        int maxZ = zone.getMaxZ();
         int minDistance = Math.max(0, Math.min(zone.spawn.minDistanceFromPlayer, zone.spawn.maxDistanceFromPlayer));
         int maxDistance = Math.max(minDistance, Math.max(zone.spawn.minDistanceFromPlayer, zone.spawn.maxDistanceFromPlayer));
 
@@ -64,12 +64,12 @@ public class SpawnPositionFinder {
     }
 
     public static Optional<BlockPos> findReturnPosition(ServerWorld world, Zone zone, MobRule rule, Entity entity, List<ServerPlayerEntity> nearbyPlayers) {
-        int minX = Math.min(zone.min.x, zone.max.x);
-        int maxX = Math.max(zone.min.x, zone.max.x);
-        int minY = Math.min(zone.min.y, zone.max.y);
-        int maxY = Math.max(zone.min.y, zone.max.y);
-        int minZ = Math.min(zone.min.z, zone.max.z);
-        int maxZ = Math.max(zone.min.z, zone.max.z);
+        int minX = zone.getMinX();
+        int maxX = zone.getMaxX();
+        int minY = zone.getMinY();
+        int maxY = zone.getMaxY();
+        int minZ = zone.getMinZ();
+        int maxZ = zone.getMaxZ();
 
         if (nearbyPlayers != null && !nearbyPlayers.isEmpty()) {
             ServerPlayerEntity player = nearbyPlayers.get(RANDOM.nextInt(nearbyPlayers.size()));

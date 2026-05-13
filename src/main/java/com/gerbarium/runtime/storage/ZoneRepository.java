@@ -6,6 +6,7 @@ import net.minecraft.world.World;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,6 +14,7 @@ import java.util.stream.Collectors;
 
 public class ZoneRepository {
     private static final Map<String, Zone> zones = new ConcurrentHashMap<>();
+    private static volatile List<Zone> enabledZonesCache = List.of();
 
     public static Collection<Zone> getAll() {
         return Collections.unmodifiableCollection(zones.values());
@@ -22,16 +24,14 @@ public class ZoneRepository {
         return Optional.ofNullable(zones.get(id));
     }
 
-    public static Collection<Zone> getEnabledZones() {
-        return zones.values().stream()
-                .filter(z -> z.enabled)
-                .collect(Collectors.toList());
+    public static List<Zone> getEnabledZones() {
+        return enabledZonesCache;
     }
 
     public static Collection<Zone> getEnabledZonesForDimension(RegistryKey<World> dimension) {
         String dimensionStr = dimension.getValue().toString();
-        return zones.values().stream()
-                .filter(z -> z.enabled && z.dimension.equals(dimensionStr))
+        return enabledZonesCache.stream()
+                .filter(z -> z.dimension.equals(dimensionStr))
                 .collect(Collectors.toList());
     }
 
@@ -40,5 +40,12 @@ public class ZoneRepository {
         for (Zone zone : newZones) {
             zones.put(zone.id, zone);
         }
+        rebuildCache();
+    }
+
+    private static void rebuildCache() {
+        enabledZonesCache = zones.values().stream()
+                .filter(z -> z.enabled)
+                .collect(Collectors.toUnmodifiableList());
     }
 }

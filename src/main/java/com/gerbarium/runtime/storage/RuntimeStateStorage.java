@@ -7,13 +7,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
 
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.UUID;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,16 +24,18 @@ public class RuntimeStateStorage {
     private static final Path ZONES_DIR = FabricLoader.getInstance().getConfigDir().resolve("gerbarium/zones");
     private static final Path OLD_STATE_FILE = STORAGE_ROOT.resolve("runtime-state.json");
     private static final Path MIGRATION_DONE_MARKER = STORAGE_ROOT.resolve("runtime-state.migration-done");
-    
+
     private static final long SAVE_DEBOUNCE_MILLIS = 5000;
 
     private static final Map<String, ZoneStateFile> states = new ConcurrentHashMap<>();
     private static final Set<String> dirtyZoneIds = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static long lastSaveTime = 0;
-    
+
     // Event rate limiting: key = zoneId:ruleId:type, value = last event time
     private static final Map<String, Long> lastEventTimes = new ConcurrentHashMap<>();
     private static final long EVENT_RATE_LIMIT_MILLIS = 60000; // 60 seconds
+    private static final long EVENT_RATE_LIMIT_CLEANUP_INTERVAL = 300000; // 5 minutes
+    private static long lastRateLimitCleanup = 0;
 
     public static ZoneStateFile getZoneState(String zoneId) {
         return states.computeIfAbsent(zoneId, id -> {
@@ -59,6 +60,18 @@ public class RuntimeStateStorage {
 
     public static void markDirty(String zoneId) {
         dirtyZoneIds.add(zoneId);
+        ZoneStateFile zf = states.get(zoneId);
+        if (zf != null) {
+            zf.dirty = true;
+        }
+    }
+
+    public static boolean isDirty(String zoneId) {
+        return dirtyZoneIds.contains(zoneId);
+    }
+
+    public static Set<String> getDirtyZoneIds() {
+        return Collections.unmodifiableSet(dirtyZoneIds);
     }
 
     public static void loadAll(Collection<Zone> loadedZones) {
@@ -95,7 +108,7 @@ public class RuntimeStateStorage {
 
         try (FileReader reader = new FileReader(path.toFile())) {
             return GSON.fromJson(reader, ZoneStateFile.class);
-        } catch (IOException e) {
+        } catch (Exception e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to load zone state: " + zoneId, e);
             return null;
         }
@@ -150,25 +163,35 @@ public class RuntimeStateStorage {
 
     public static void saveAllDirty() {
         List<String> toSave = new ArrayList<>(dirtyZoneIds);
-        dirtyZoneIds.clear();
         for (String id : toSave) {
-            saveZone(id);
+            if (saveZone(id)) {
+                dirtyZoneIds.remove(id);
+            }
         }
         lastSaveTime = System.currentTimeMillis();
     }
 
-    public static void saveZone(String zoneId) {
+    public static boolean saveZone(String zoneId) {
         ZoneStateFile zf = states.get(zoneId);
-        if (zf == null) return;
+        if (zf == null) return true;
 
         try {
             ensureStorageDirectories();
             Path path = getZoneStatePath(zoneId);
-            try (FileWriter writer = new FileWriter(path.toFile())) {
+            Path tempPath = path.resolveSibling(path.getFileName() + ".tmp");
+            try (FileWriter writer = new FileWriter(tempPath.toFile())) {
                 GSON.toJson(zf, writer);
             }
+            Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            zf.dirty = false;
+            return true;
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to save zone state: " + zoneId, e);
+            try {
+                Files.deleteIfExists(getZoneStatePath(zoneId).resolveSibling(getZoneStatePath(zoneId).getFileName() + ".tmp"));
+            } catch (IOException ignored) {
+            }
+            return false;
         }
     }
 
@@ -179,15 +202,16 @@ public class RuntimeStateStorage {
             String key = zoneId + ":" + (ruleId != null ? ruleId : "null") + ":" + type;
             Long lastTime = lastEventTimes.get(key);
             long now = System.currentTimeMillis();
-            
+
             if (lastTime != null && (now - lastTime) < EVENT_RATE_LIMIT_MILLIS) {
-                // Skip this event, too soon
                 return;
             }
-            
+
             lastEventTimes.put(key, now);
         }
-        
+
+        maybeCleanupRateLimit();
+
         ZoneStateFile zf = getZoneState(zoneId);
         zf.recentEvents.add(0, new RuntimeEvent(System.currentTimeMillis(), zoneId, ruleId, type, message));
         if (zf.recentEvents.size() > 200) {
@@ -207,6 +231,8 @@ public class RuntimeStateStorage {
         }
         lastEventTimes.put(key, now);
 
+        maybeCleanupRateLimit();
+
         RuntimeEvent event = new RuntimeEvent(now, zoneId, ruleId, type, message);
         event.entityType = entityType;
         event.role = role;
@@ -221,6 +247,16 @@ public class RuntimeStateStorage {
             zf.recentEvents.remove(zf.recentEvents.size() - 1);
         }
         markDirty(zoneId);
+    }
+
+    private static void maybeCleanupRateLimit() {
+        long now = System.currentTimeMillis();
+        if (now - lastRateLimitCleanup < EVENT_RATE_LIMIT_CLEANUP_INTERVAL) {
+            return;
+        }
+        lastRateLimitCleanup = now;
+        long cutoff = now - EVENT_RATE_LIMIT_MILLIS * 2;
+        lastEventTimes.entrySet().removeIf(entry -> entry.getValue() < cutoff);
     }
 
     public static void clearZoneState(String zoneId) {

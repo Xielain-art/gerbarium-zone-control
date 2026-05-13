@@ -16,6 +16,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.registry.Registries;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -42,7 +43,7 @@ public class EntitySpawnService {
         }
 
         entity.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, RANDOM.nextFloat() * 360.0F, 0.0F);
-        
+
         if (entity instanceof MobEntity mob) {
             mob.initialize(world, world.getLocalDifficulty(pos), SpawnReason.SPAWNER, null, null);
             mob.setPersistent();
@@ -68,17 +69,23 @@ public class EntitySpawnService {
     }
 
     public static int spawnCompanions(ServerWorld world, Zone zone, MobRule parentRule, Entity primaryEntity, SpawnContext context) {
+        List<CompanionRule> companions = parentRule.companions;
+        if (companions == null || companions.isEmpty()) {
+            return 0;
+        }
+
         int spawnedCount = 0;
         BlockPos primaryPos = primaryEntity.getBlockPos();
 
-        int minX = Math.min(zone.min.x, zone.max.x);
-        int maxX = Math.max(zone.min.x, zone.max.x);
-        int minY = Math.min(zone.min.y, zone.max.y);
-        int maxY = Math.max(zone.min.y, zone.max.y);
-        int minZ = Math.min(zone.min.z, zone.max.z);
-        int maxZ = Math.max(zone.min.z, zone.max.z);
+        int minX = zone.getMinX();
+        int maxX = zone.getMaxX();
+        int minY = zone.getMinY();
+        int maxY = zone.getMaxY();
+        int minZ = zone.getMinZ();
+        int maxZ = zone.getMaxZ();
 
-        for (CompanionRule companion : parentRule.companions) {
+        for (CompanionRule companion : companions) {
+            if (companion == null || companion.entity == null) continue;
             if (RANDOM.nextDouble() > companion.chance) continue;
 
             Identifier entityId = Identifier.tryParse(companion.entity);

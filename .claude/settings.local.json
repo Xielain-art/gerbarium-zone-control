@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-Content -Path \"C:\\\\Users\\\\user\\\\test\\\\gerbarium-zone-control\\\\src\\\\main\\\\java\\\\com\\\\gerbarium\\\\runtime\\\\admin\\\\RuntimeAdminService.java\" -Encoding UTF8)",
+      "Bash(Set-Content -Path \"C:\\\\Users\\\\user\\\\test\\\\gerbarium-zone-control\\\\src\\\\main\\\\java\\\\com\\\\gerbarium\\\\runtime\\\\admin\\\\RuntimeAdminService.java\" -Encoding UTF8NoBOM)",
+      "Bash(while read file)",
+      "Bash(do sed -i '1s/^\\\\xEF\\\\xBB\\\\xBF//' \"$file\")",
+      "Bash(done)",
+      "Bash(./gradlew.bat clean build:*)"
+    ]
+  }
+}

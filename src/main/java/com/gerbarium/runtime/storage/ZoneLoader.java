@@ -59,6 +59,9 @@ public class ZoneLoader {
                 return null;
             }
 
+            // Normalize null collections and enums before validation
+            zone.normalize();
+
             if (zone.id == null || zone.id.isBlank()) {
                 GerbariumRegionsRuntime.LOGGER.error("Zone file has missing id: " + filename);
                 return null;
@@ -74,8 +77,47 @@ public class ZoneLoader {
                 return null;
             }
 
-            // Normalization and defaults are handled by GSON and class initializers.
-            // Further validation (e.g., dimension check) could be added here.
+            if (zone.min == null || zone.max == null) {
+                GerbariumRegionsRuntime.LOGGER.error("Zone " + zone.id + " has missing min/max coordinates");
+                return null;
+            }
+
+            if (zone.dimension == null || zone.dimension.isBlank()) {
+                GerbariumRegionsRuntime.LOGGER.error("Zone " + zone.id + " has missing dimension");
+                return null;
+            }
+
+            // Warn about inverted bounds (not fatal, code uses Math.min/max defensively)
+            if (zone.getMinX() > zone.getMaxX() || zone.getMinY() > zone.getMaxY() || zone.getMinZ() > zone.getMaxZ()) {
+                GerbariumRegionsRuntime.LOGGER.warn("Zone " + zone.id + " has inverted min/max bounds. This may cause unexpected behavior.");
+            }
+
+            // Validate mob rules
+            for (int i = 0; i < zone.mobs.size(); i++) {
+                var rule = zone.mobs.get(i);
+                if (rule.id == null || rule.id.isBlank()) {
+                    GerbariumRegionsRuntime.LOGGER.error("Zone " + zone.id + " mob rule at index " + i + " has missing id, skipping rule");
+                    zone.mobs.set(i, null);
+                    continue;
+                }
+                if (rule.entity == null || rule.entity.isBlank()) {
+                    GerbariumRegionsRuntime.LOGGER.warn("Zone " + zone.id + " rule " + rule.id + " has missing entity");
+                }
+                if (rule.spawnType == null) {
+                    GerbariumRegionsRuntime.LOGGER.warn("Zone " + zone.id + " rule " + rule.id + " has invalid spawnType, defaulting to PACK");
+                    rule.spawnType = com.gerbarium.runtime.model.SpawnType.PACK;
+                }
+                if (rule.refillMode == null) {
+                    GerbariumRegionsRuntime.LOGGER.warn("Zone " + zone.id + " rule " + rule.id + " has invalid refillMode, defaulting to ON_ACTIVATION");
+                    rule.refillMode = com.gerbarium.runtime.model.RefillMode.ON_ACTIVATION;
+                }
+                if (com.gerbarium.runtime.model.BoundaryMode.from(rule.boundaryMode) == null) {
+                    GerbariumRegionsRuntime.LOGGER.warn("Zone " + zone.id + " rule " + rule.id + " has invalid boundaryMode: " + rule.boundaryMode);
+                }
+            }
+
+            // Remove null entries from failed validations
+            zone.mobs.removeIf(rule -> rule == null);
 
             return zone;
         } catch (IOException e) {

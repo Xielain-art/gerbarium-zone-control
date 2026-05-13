@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 public class ZoneStateFile {
     public int version = 1;
@@ -12,6 +14,7 @@ public class ZoneStateFile {
     public Map<String, RuleRuntimeState> rules = new HashMap<>();
     public List<RuntimeEvent> recentEvents = new ArrayList<>();
     public transient boolean dirty = false;
+    public transient Set<String> dirtyRuleIds = new HashSet<>();
 
     public ZoneStateFile() {}
 

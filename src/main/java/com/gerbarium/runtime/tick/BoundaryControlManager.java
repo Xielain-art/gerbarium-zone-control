@@ -7,6 +7,7 @@ import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.spawn.SpawnPositionFinder;
 import com.gerbarium.runtime.state.RuleRuntimeState;
+import com.gerbarium.runtime.state.ZoneRuntimeState;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tracking.ManagedMobInfo;
@@ -35,12 +36,7 @@ public final class BoundaryControlManager {
             return;
         }
 
-        int interval = Math.max(1, config.boundaryGlobalCheckIntervalTicks);
         boundaryTickCounter++;
-        if (boundaryTickCounter % interval != 0) {
-            return;
-        }
-
         long now = System.currentTimeMillis();
         int processed = 0;
         int maxEntities = Math.max(1, config.boundaryMaxEntitiesPerTick);
@@ -50,8 +46,8 @@ public final class BoundaryControlManager {
                 return;
             }
 
-            ZoneActivationManager.getZoneState(zone.id); // warm state
-            if (!ZoneActivationManager.getZoneState(zone.id).active) {
+            ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
+            if (!zState.active) {
                 continue;
             }
 
@@ -64,7 +60,7 @@ public final class BoundaryControlManager {
                 RuntimeStateStorage.getRuleState(zone.id, rule.id).boundaryOutsideCount = 0;
             }
 
-            Box expandedBox = getZoneBox(zone).expand(Math.max(0, config.boundaryScanPadding));
+            Box expandedBox = zone.getExpandedBox(Math.max(0, config.boundaryScanPadding));
             for (Entity entity : world.getOtherEntities(null, expandedBox)) {
                 if (processed >= maxEntities) {
                     return;
@@ -134,7 +130,7 @@ public final class BoundaryControlManager {
                     entity.getBlockX(),
                     entity.getBlockY(),
                     entity.getBlockZ(),
-                    "track_outside"
+                    "outside"
             );
             RuntimeStateStorage.markDirty(zone.id);
         }
@@ -142,9 +138,6 @@ public final class BoundaryControlManager {
         long outsideSince = MobTagger.getOutsideSince(entity);
         long outsideMillis = now - outsideSince;
         long thresholdMillis = Math.max(0, rule.boundaryMaxOutsideSeconds) * 1000L;
-        if (outsideSince <= 0L) {
-            return;
-        }
 
         if (outsideMillis < thresholdMillis) {
             return;
@@ -213,13 +206,15 @@ public final class BoundaryControlManager {
         ((EntityPersistentDataHolder) entity).getPersistentData().putBoolean(MobTagger.TAG_CLEANUP, true);
         MobTagger.clearOutsideSince(entity);
         MobTagger.setLastBoundaryActionAt(entity, now);
-        entity.discard();
 
+        // Decrement before discard to ensure tracking is consistent
         if ("PRIMARY".equals(info.role)) {
             MobTracker.decrementPrimary(zone.id, rule.id, info.forced);
         } else if ("COMPANION".equals(info.role)) {
             MobTracker.decrementCompanion(zone.id, rule.id, info.forced);
         }
+
+        entity.discard();
 
         state.lastBoundaryActionAt = now;
         state.lastBoundaryActionType = "BOUNDARY_REMOVED";
@@ -243,25 +238,11 @@ public final class BoundaryControlManager {
     }
 
     private static boolean isInsideZone(Entity entity, Zone zone) {
-        int minX = Math.min(zone.min.x, zone.max.x);
-        int maxX = Math.max(zone.min.x, zone.max.x);
-        int minY = Math.min(zone.min.y, zone.max.y);
-        int maxY = Math.max(zone.min.y, zone.max.y);
-        int minZ = Math.min(zone.min.z, zone.max.z);
-        int maxZ = Math.max(zone.min.z, zone.max.z);
-
         double x = entity.getX();
         double y = entity.getY();
         double z = entity.getZ();
-        return x >= minX && x < (maxX + 1.0)
-                && y >= minY && y < (maxY + 1.0)
-                && z >= minZ && z < (maxZ + 1.0);
-    }
-
-    private static Box getZoneBox(Zone zone) {
-        return new Box(
-                Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),
-                Math.max(zone.min.x, zone.max.x) + 1, Math.max(zone.min.y, zone.max.y) + 1, Math.max(zone.min.z, zone.max.z) + 1
-        );
+        return x >= zone.getMinX() && x < (zone.getMaxX() + 1.0)
+                && y >= zone.getMinY() && y < (zone.getMaxY() + 1.0)
+                && z >= zone.getMinZ() && z < (zone.getMaxZ() + 1.0);
     }
 }

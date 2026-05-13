@@ -151,6 +151,7 @@ public class GerbariumRuntimeServerNetworking {
             }
             z.primaryAliveTotal = totalPrimaryAlive;
             z.companionsAliveTotal = totalCompanionsAlive;
+            ZoneStateFile zf = RuntimeStateStorage.getZoneState(zone.id);
             z.boundaryOutsideCount = zone.mobs.stream()
                     .mapToInt(rule -> {
                         RuleRuntimeState state = zf.rules.get(rule.id);
@@ -168,7 +169,6 @@ public class GerbariumRuntimeServerNetworking {
             z.priority = zone.priority;
             z.activationId = zState.activationId;
 
-            ZoneStateFile zf = RuntimeStateStorage.getZoneState(zone.id);
             ZoneRuntimePersistentState pState = zf.zone;
             z.lastActivatedAt = pState.lastActivatedAt;
             z.lastDeactivatedAt = pState.lastDeactivatedAt;

@@ -5,12 +5,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
 
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 public class RuntimeConfigStorage {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -26,10 +26,10 @@ public class RuntimeConfigStorage {
     public static void load() {
         try {
             Files.createDirectories(CONFIG_DIR);
-            File file = CONFIG_FILE.toFile();
+            Path path = CONFIG_FILE;
 
-            if (file.exists()) {
-                try (FileReader reader = new FileReader(file)) {
+            if (Files.exists(path)) {
+                try (FileReader reader = new FileReader(path.toFile())) {
                     config = GSON.fromJson(reader, RuntimeConfig.class);
                     if (config == null) {
                         config = new RuntimeConfig();
@@ -46,11 +46,17 @@ public class RuntimeConfigStorage {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_DIR);
-            try (FileWriter writer = new FileWriter(CONFIG_FILE.toFile())) {
+            Path tempPath = CONFIG_FILE.resolveSibling(CONFIG_FILE.getFileName() + ".tmp");
+            try (FileWriter writer = new FileWriter(tempPath.toFile())) {
                 GSON.toJson(config, writer);
             }
+            Files.move(tempPath, CONFIG_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to save runtime config", e);
+            try {
+                Files.deleteIfExists(CONFIG_FILE.resolveSibling(CONFIG_FILE.getFileName() + ".tmp"));
+            } catch (IOException ignored) {
+            }
         }
     }
 }

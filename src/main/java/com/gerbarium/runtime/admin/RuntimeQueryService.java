@@ -47,7 +47,7 @@ public class RuntimeQueryService {
             }
             
             ZoneStateFile zf = RuntimeStateStorage.getZoneState(zone.id);
-            if (zf.dirty) dirtyStates++;
+            if ((RuntimeStateStorage.isDirty(zone.id))) dirtyStates++;
         }
         
         StringBuilder sb = new StringBuilder();
@@ -82,7 +82,7 @@ public class RuntimeQueryService {
             sb.append("- ").append(zone.id);
             sb.append(" | name: ").append(zone.name != null && !zone.name.isBlank() ? zone.name : zone.id);
             sb.append(" | file: yes");
-            sb.append(" | dirty: ").append(zf.dirty ? "yes" : "no");
+            sb.append(" | dirty: ").append((RuntimeStateStorage.isDirty(zone.id)) ? "yes" : "no");
             sb.append(" | rules: ").append(zf.rules.size());
             sb.append(" | events: ").append(zf.recentEvents.size());
             sb.append(" | last activated: ").append(TimeUtil.formatRelative(zf.zone.lastActivatedAt));
@@ -555,5 +555,10 @@ public class RuntimeQueryService {
         }
 
         return sb.toString();
+    }
+
+
+    private static String valueOrDash(String value) {
+        return (value == null || value.isBlank()) ? "-" : value;
     }
 }

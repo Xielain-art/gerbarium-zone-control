@@ -25,4 +25,19 @@ public class MobRule {
     public boolean despawnWhenZoneInactive = false;
     public boolean announceOnSpawn = false;
     public List<CompanionRule> companions = new ArrayList<>();
+
+    public void normalize() {
+        if (companions == null) {
+            companions = new ArrayList<>();
+        }
+        if (cooldownStart == null) {
+            cooldownStart = CooldownStart.AFTER_ACTIVATION;
+        }
+        if (refillMode == null) {
+            refillMode = RefillMode.ON_ACTIVATION;
+        }
+        if (spawnType == null) {
+            spawnType = SpawnType.PACK;
+        }
+    }
 }

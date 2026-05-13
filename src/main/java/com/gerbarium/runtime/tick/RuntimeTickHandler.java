@@ -26,7 +26,9 @@ public class RuntimeTickHandler {
             ZoneMobSpawner.tick(server);
         }
 
-        BoundaryControlManager.tick(server);
+        if (tickCounter % Math.max(1, config.boundaryGlobalCheckIntervalTicks) == 0) {
+            BoundaryControlManager.tick(server);
+        }
 
         if (tickCounter % config.resyncIntervalTicks == 0) {
             MobTracker.resyncActiveZones(server);
@@ -35,7 +37,5 @@ public class RuntimeTickHandler {
         if (tickCounter % config.stateSaveIntervalTicks == 0) {
             RuntimeStateStorage.saveIfDirty();
         }
-
-        // autoReload logic could be added here if needed
     }
 }

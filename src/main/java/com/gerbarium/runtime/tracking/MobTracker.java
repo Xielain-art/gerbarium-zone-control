@@ -17,12 +17,12 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MobTracker {
-    // Key: zoneId + ":" + ruleId
     private static final Map<String, Integer> primaryNormalCounts = new ConcurrentHashMap<>();
     private static final Map<String, Integer> primaryForcedCounts = new ConcurrentHashMap<>();
     private static final Map<String, Integer> companionNormalCounts = new ConcurrentHashMap<>();
@@ -45,7 +45,7 @@ public class MobTracker {
         if (infoOpt.isEmpty()) return;
 
         ManagedMobInfo info = infoOpt.get();
-        
+
         if ("PRIMARY".equals(info.role)) {
             decrementPrimary(info.zoneId, info.ruleId, info.forced);
         } else if ("COMPANION".equals(info.role)) {
@@ -78,14 +78,13 @@ public class MobTracker {
         if (ruleOpt.isEmpty() || ruleOpt.get().spawnType != SpawnType.UNIQUE) return;
 
         RuleRuntimeState state = RuntimeStateStorage.getRuleState(zoneId, ruleId);
-        
+
         // Forced encounters should not affect normal encounter state
         if (forced) {
-            // Forced mobs died, but don't clear normal encounter or start cooldown
             RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCED_UNIQUE_CLEARED", "Forced unique encounter cleared (normal schedule unchanged)");
             return;
         }
-        
+
         if (!state.encounterActive) return;
 
         int pAlive = getNormalPrimaryAliveCount(zoneId, ruleId);
@@ -103,37 +102,29 @@ public class MobTracker {
             if (cleanup) {
                 state.nextAttemptAt = state.encounterClearedAt + ruleOpt.get().failedSpawnRetrySeconds * 1000L;
                 state.lastAttemptReason = "Unique encounter cleaned up, retry scheduled";
-                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleaned up");
+                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared (cleanup), retry in " + ruleOpt.get().failedSpawnRetrySeconds + "s");
             } else if (cooldownStart == CooldownStart.AFTER_DEATH) {
-                state.nextAvailableAt = state.encounterClearedAt + (long) ruleOpt.get().respawnSeconds * 1000L;
-                state.nextAttemptAt = state.nextAvailableAt;
-                state.lastAttemptReason = "Unique encounter cleared, next available after cooldown";
-                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared, cooldown started");
+                state.nextAttemptAt = state.encounterClearedAt + ruleOpt.get().respawnSeconds * 1000L;
+                state.lastAttemptReason = "Unique encounter cleared, next in " + ruleOpt.get().respawnSeconds + "s";
+                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared, next available in " + ruleOpt.get().respawnSeconds + "s");
             } else {
-                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared");
+                RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared.");
             }
+            RuntimeStateStorage.markDirty(zoneId);
         }
-        RuntimeStateStorage.markDirty(zoneId);
     }
 
     private static void maybeStartCooldownOnDeath(String zoneId, String ruleId, long now, RuleRuntimeState state) {
         Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
         if (zoneOpt.isEmpty()) return;
-
         Optional<MobRule> ruleOpt = zoneOpt.get().mobs.stream().filter(m -> m.id.equals(ruleId)).findFirst();
         if (ruleOpt.isEmpty()) return;
 
         MobRule rule = ruleOpt.get();
         CooldownStart cooldownStart = rule.cooldownStart == null ? CooldownStart.AFTER_ACTIVATION : rule.cooldownStart;
-        if (rule.spawnType != SpawnType.PACK || cooldownStart != CooldownStart.AFTER_DEATH) {
-            return;
-        }
-
-        int normalAlive = getNormalPrimaryAliveCount(zoneId, ruleId) + getNormalCompanionAliveCount(zoneId, ruleId);
-        if (normalAlive == 0) {
-            long cooldownMillis = (long) rule.respawnSeconds * 1000L;
-            state.nextAvailableAt = now + cooldownMillis;
-            state.nextAttemptAt = state.nextAvailableAt;
+        if (cooldownStart == CooldownStart.AFTER_DEATH) {
+            state.nextAttemptAt = now + rule.respawnSeconds * 1000L;
+            state.nextAvailableAt = state.nextAttemptAt;
         }
     }
 
@@ -189,7 +180,7 @@ public class MobTracker {
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return;
 
-        Box box = getZoneBox(zone);
+        Box box = zone.getZoneBox();
 
         for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
             Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
@@ -198,7 +189,7 @@ public class MobTracker {
                 else if ("COMPANION".equals(info.get().role)) incrementCompanion(zone.id, info.get().ruleId, info.get().forced);
             }
         }
-        
+
         // After resync, check if any unique encounters should be marked cleared
         for (MobRule rule : zone.mobs) {
             if (rule.spawnType == SpawnType.UNIQUE) {
@@ -207,38 +198,45 @@ public class MobTracker {
         }
     }
 
-    private static Box getZoneBox(Zone zone) {
-        return new Box(
-                Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),
-                Math.max(zone.min.x, zone.max.x) + 1, Math.max(zone.min.y, zone.max.y) + 1, Math.max(zone.min.z, zone.max.z) + 1
-        );
-    }
-
     public static void resyncActiveZones(MinecraftServer server) {
-        primaryNormalCounts.clear();
-        primaryForcedCounts.clear();
-        companionNormalCounts.clear();
-        companionForcedCounts.clear();
+        // Build new counts in temporary maps to avoid race with death/spawn events
+        Map<String, Integer> newPrimaryNormal = new HashMap<>();
+        Map<String, Integer> newPrimaryForced = new HashMap<>();
+        Map<String, Integer> newCompanionNormal = new HashMap<>();
+        Map<String, Integer> newCompanionForced = new HashMap<>();
 
         for (Zone zone : ZoneRepository.getEnabledZones()) {
             ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
             if (!zState.active) continue;
-            
+
             ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
             if (world == null) continue;
 
-            Box box = getZoneBox(zone);
+            Box box = zone.getZoneBox();
 
             for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
                 Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
                 if (info.isPresent() && info.get().zoneId.equals(zone.id)) {
+                    String key = zone.id + ":" + info.get().ruleId;
                     if ("PRIMARY".equals(info.get().role)) {
-                        incrementPrimary(zone.id, info.get().ruleId, info.get().forced);
+                        Map<String, Integer> target = info.get().forced ? newPrimaryForced : newPrimaryNormal;
+                        target.merge(key, 1, Integer::sum);
                     } else if ("COMPANION".equals(info.get().role)) {
-                        incrementCompanion(zone.id, info.get().ruleId, info.get().forced);
+                        Map<String, Integer> target = info.get().forced ? newCompanionForced : newCompanionNormal;
+                        target.merge(key, 1, Integer::sum);
                     }
                 }
             }
         }
+
+        // Swap atomically: clear old maps and put new values
+        primaryNormalCounts.clear();
+        primaryNormalCounts.putAll(newPrimaryNormal);
+        primaryForcedCounts.clear();
+        primaryForcedCounts.putAll(newPrimaryForced);
+        companionNormalCounts.clear();
+        companionNormalCounts.putAll(newCompanionNormal);
+        companionForcedCounts.clear();
+        companionForcedCounts.putAll(newCompanionForced);
     }
 }

@@ -21,7 +21,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 
-import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -29,7 +29,7 @@ public class ZoneMobSpawner {
     private static final Random RANDOM = new Random();
 
     public static void tick(MinecraftServer server) {
-        Collection<Zone> zones = ZoneRepository.getEnabledZones();
+        List<Zone> zones = ZoneRepository.getEnabledZones();
         int zonesProcessed = 0;
         int totalSpawnsThisTick = 0;
         int maxSpawns = RuntimeConfigStorage.getConfig().maxSpawnsPerTickCycle;
@@ -52,7 +52,12 @@ public class ZoneMobSpawner {
                 continue;
             }
 
-            for (MobRule rule : zone.mobs) {
+            List<MobRule> mobs = zone.mobs;
+            if (mobs == null) {
+                continue;
+            }
+
+            for (MobRule rule : mobs) {
                 if (totalSpawnsThisTick >= maxSpawns) {
                     break;
                 }
@@ -204,54 +209,26 @@ public class ZoneMobSpawner {
             return 0;
         }
 
-        if (budget != -1 && state.timedSpawnedThisActivation >= budget) {
-            state.timedBudgetExhausted = true;
-            state.nextTimedSpawnInMillis = 0;
-            RuntimeStateStorage.markDirty(zone.id);
+        if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null || RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
             return 0;
         }
 
-        if (RANDOM.nextDouble() > rule.chance) {
-            state.lastAttemptAt = now;
-            state.lastAttemptResult = "SKIPPED_CHANCE_FAIL";
-            state.lastAttemptReason = "Chance roll failed";
-            state.totalAttempts++;
-            zoneState.totalSpawnAttempts++;
-            RuntimeStateStorage.markDirty(zone.id);
-            return 0;
+        int toSpawn = Math.min(rule.spawnCount, rule.maxAlive - alive);
+        if (budget != -1) {
+            toSpawn = Math.min(toSpawn, budget - state.timedSpawnedThisActivation);
         }
-
-        int toSpawn = Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
         if (toSpawn <= 0) {
             return 0;
         }
 
         int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, toSpawn);
         if (spawned > 0) {
-            state.lastAttemptAt = now;
-            state.lastAttemptResult = "SUCCESS";
-            state.lastAttemptReason = "Spawned " + spawned + " primary mobs";
-            state.lastSuccessAt = now;
-            state.lastSuccessfulPrimaryCount = spawned;
-            state.lastSuccessfulCompanionCount = state.lastEncounterCompanionsSpawned;
-            state.totalAttempts++;
-            state.totalSuccesses++;
-            state.totalPrimarySpawned += spawned;
-            state.totalCompanionsSpawned += state.lastEncounterCompanionsSpawned;
             state.timedSpawnedThisActivation += spawned;
-            zoneState.totalSpawnAttempts++;
-            zoneState.totalSuccessfulSpawns++;
-            RuntimeStateStorage.addEvent(zone.id, rule.id, "PACK_SUCCESS", "Timed pack spawned " + spawned + " primary mobs");
-            if (state.lastEncounterCompanionsSpawned > 0) {
-                RuntimeStateStorage.addEvent(zone.id, rule.id, "COMPANIONS_SPAWNED", "Spawned " + state.lastEncounterCompanionsSpawned + " companions");
+            if (budget != -1 && state.timedSpawnedThisActivation >= budget) {
+                state.timedBudgetExhausted = true;
+                state.nextTimedSpawnInMillis = 0;
             }
-        } else {
-            state.lastAttemptAt = now;
-            state.lastAttemptResult = "FAILED_NO_POSITION";
-            state.lastAttemptReason = "Could not find valid spawn position";
-            state.totalAttempts++;
-            zoneState.totalSpawnAttempts++;
-            state.nextAttemptAt = now + rule.failedSpawnRetrySeconds * 1000L;
+            RuntimeStateStorage.addEvent(zone.id, rule.id, "TIMED_PACK_SUCCESS", "Timed pack spawned " + spawned + " primary mobs");
         }
 
         RuntimeStateStorage.markDirty(zone.id);
@@ -275,7 +252,7 @@ public class ZoneMobSpawner {
             return 0;
         }
 
-        if (state.nextAvailableAt > now || state.nextAttemptAt > now) {
+        if (state.nextAttemptAt > now || state.nextAvailableAt > now) {
             return 0;
         }
 
