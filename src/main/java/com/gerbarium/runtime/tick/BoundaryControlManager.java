@@ -17,26 +17,26 @@ import com.gerbarium.runtime.tracking.MobTracker;
 import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
 import com.gerbarium.runtime.util.RuntimeWorldUtil;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 public final class BoundaryControlManager {
-    private static long boundaryTickCounter = 0;
-
     private BoundaryControlManager() {
     }
 
-    public static void tick(MinecraftServer server) {
+    public static void tick(MinecraftServer server, long gameTickCounter) {
         RuntimeConfig config = RuntimeConfigStorage.getConfig();
         if (!config.boundaryControlEnabled) {
             return;
         }
 
-        boundaryTickCounter++;
         long now = System.currentTimeMillis();
         int processed = 0;
         int maxEntities = Math.max(1, config.boundaryMaxEntitiesPerTick);
@@ -56,8 +56,26 @@ public final class BoundaryControlManager {
                 continue;
             }
 
+            Map<String, RuleRuntimeState> activeRuleStates = new HashMap<>();
+            Map<String, MobRule> activeRules = new HashMap<>();
             for (MobRule rule : zone.mobs) {
-                RuntimeStateStorage.getRuleState(zone.id, rule.id).boundaryOutsideCount = 0;
+                if (rule.boundaryMode == null) continue;
+                if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) continue;
+                BoundaryMode mode = RuntimeRuleValidationUtil.getBoundaryMode(rule);
+                if (mode == null || mode == BoundaryMode.NONE) continue;
+
+                int interval = Math.max(1, rule.boundaryCheckIntervalTicks);
+                if (gameTickCounter % interval != 0) continue;
+
+                RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
+                state.boundaryOutsideCount = 0;
+                state.boundaryLastScanAt = now;
+                activeRuleStates.put(rule.id, state);
+                activeRules.put(rule.id, rule);
+            }
+
+            if (activeRuleStates.isEmpty()) {
+                continue;
             }
 
             Box expandedBox = zone.getExpandedBox(Math.max(0, config.boundaryScanPadding));
@@ -65,72 +83,42 @@ public final class BoundaryControlManager {
                 if (processed >= maxEntities) {
                     return;
                 }
-                processed++;
 
                 Optional<ManagedMobInfo> infoOpt = MobTagger.getInfo(entity);
-                if (infoOpt.isEmpty()) {
-                    continue;
-                }
+                if (infoOpt.isEmpty()) continue;
 
                 ManagedMobInfo info = infoOpt.get();
-                if (!zone.id.equals(info.zoneId)) {
+                if (!zone.id.equals(info.zoneId)) continue;
+
+                RuleRuntimeState state = activeRuleStates.get(info.ruleId);
+                if (state == null) continue;
+
+                MobRule rule = activeRules.get(info.ruleId);
+                if (rule == null) continue;
+
+                processed++;
+
+                if (isInsideZone(entity, zone)) {
+                    MobTagger.clearOutsideSince(entity);
                     continue;
                 }
 
-                Optional<MobRule> ruleOpt = zone.mobs.stream().filter(rule -> rule.id.equals(info.ruleId)).findFirst();
-                if (ruleOpt.isEmpty()) {
-                    continue;
-                }
-
-                MobRule rule = ruleOpt.get();
-                if (rule.boundaryMode == null) {
-                    continue;
-                }
-
-                if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) {
-                    continue;
-                }
-
+                state.boundaryOutsideCount++;
                 BoundaryMode mode = RuntimeRuleValidationUtil.getBoundaryMode(rule);
-                if (mode == null || mode == BoundaryMode.NONE) {
-                    continue;
-                }
-
-                handleBoundary(server, world, zone, rule, entity, info, now, config, mode);
+                handleOutside(server, world, zone, rule, entity, info, now, config, mode, state);
             }
         }
     }
 
-    private static void handleBoundary(MinecraftServer server, ServerWorld world, Zone zone, MobRule rule, Entity entity,
-                                       ManagedMobInfo info, long now, RuntimeConfig config, BoundaryMode mode) {
-        if (boundaryTickCounter % Math.max(1, rule.boundaryCheckIntervalTicks) != 0) {
-            return;
-        }
-
-        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
-        state.boundaryLastScanAt = now;
-
-        if (isInsideZone(entity, zone)) {
-            MobTagger.clearOutsideSince(entity);
-            return;
-        }
-
-        state.boundaryOutsideCount++;
+    private static void handleOutside(MinecraftServer server, ServerWorld world, Zone zone, MobRule rule, Entity entity,
+                                       ManagedMobInfo info, long now, RuntimeConfig config, BoundaryMode mode, RuleRuntimeState state) {
         if (MobTagger.getOutsideSince(entity) <= 0L) {
             MobTagger.setOutsideSince(entity, now);
             RuntimeStateStorage.addBoundaryEvent(
-                    zone.id,
-                    rule.id,
-                    entity.getUuid(),
-                    "BOUNDARY_OUTSIDE",
-                    "Managed mob moved outside zone bounds.",
-                    entity.getType().toString(),
-                    info.role,
-                    info.forced,
-                    entity.getBlockX(),
-                    entity.getBlockY(),
-                    entity.getBlockZ(),
-                    "outside"
+                    zone.id, rule.id, entity.getUuid(),
+                    "BOUNDARY_OUTSIDE", "Managed mob moved outside zone bounds.",
+                    entity.getType().toString(), info.role, info.forced,
+                    entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(), "outside"
             );
             RuntimeStateStorage.markDirty(zone.id);
         }
@@ -144,7 +132,7 @@ public final class BoundaryControlManager {
         }
 
         if (mode == BoundaryMode.REMOVE_OUTSIDE) {
-            removeOutsideMob(zone, rule, entity, info, now);
+            removeOutsideMob(zone, rule, entity, info, now, state);
             return;
         }
 
@@ -158,25 +146,21 @@ public final class BoundaryControlManager {
         if (returnPos.isEmpty()) {
             state.boundaryLastHint = "No valid return position found.";
             RuntimeStateStorage.addBoundaryEvent(
-                    zone.id,
-                    rule.id,
-                    entity.getUuid(),
-                    "BOUNDARY_FAILED_NO_POSITION",
-                    "No valid return position was available inside the zone.",
-                    entity.getType().toString(),
-                    info.role,
-                    info.forced,
-                    entity.getBlockX(),
-                    entity.getBlockY(),
-                    entity.getBlockZ(),
-                    "failed_no_position"
+                    zone.id, rule.id, entity.getUuid(),
+                    "BOUNDARY_FAILED_NO_POSITION", "No valid return position was available inside the zone.",
+                    entity.getType().toString(), info.role, info.forced,
+                    entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(), "failed_no_position"
             );
             RuntimeStateStorage.markDirty(zone.id);
             return;
         }
 
         BlockPos pos = returnPos.get();
-        entity.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, entity.getYaw(), entity.getPitch());
+        if (entity instanceof LivingEntity living) {
+            living.teleport(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+        } else {
+            entity.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, entity.getYaw(), entity.getPitch());
+        }
         entity.setVelocity(0.0, 0.0, 0.0);
         MobTagger.clearOutsideSince(entity);
         MobTagger.setLastBoundaryActionAt(entity, now);
@@ -185,29 +169,19 @@ public final class BoundaryControlManager {
         state.boundaryLastHint = "";
 
         RuntimeStateStorage.addBoundaryEvent(
-                zone.id,
-                rule.id,
-                entity.getUuid(),
-                "BOUNDARY_TELEPORT",
-                "Managed mob teleported back inside the zone.",
-                entity.getType().toString(),
-                info.role,
-                info.forced,
-                pos.getX(),
-                pos.getY(),
-                pos.getZ(),
-                "teleport_back"
+                zone.id, rule.id, entity.getUuid(),
+                "BOUNDARY_TELEPORT", "Managed mob teleported back inside the zone.",
+                entity.getType().toString(), info.role, info.forced,
+                pos.getX(), pos.getY(), pos.getZ(), "teleport_back"
         );
         RuntimeStateStorage.markDirty(zone.id);
     }
 
-    private static void removeOutsideMob(Zone zone, MobRule rule, Entity entity, ManagedMobInfo info, long now) {
-        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
+    private static void removeOutsideMob(Zone zone, MobRule rule, Entity entity, ManagedMobInfo info, long now, RuleRuntimeState state) {
         ((EntityPersistentDataHolder) entity).getPersistentData().putBoolean(MobTagger.TAG_CLEANUP, true);
         MobTagger.clearOutsideSince(entity);
         MobTagger.setLastBoundaryActionAt(entity, now);
 
-        // Decrement before discard to ensure tracking is consistent
         if ("PRIMARY".equals(info.role)) {
             MobTracker.decrementPrimary(zone.id, rule.id, info.forced);
         } else if ("COMPANION".equals(info.role)) {
@@ -220,18 +194,10 @@ public final class BoundaryControlManager {
         state.lastBoundaryActionType = "BOUNDARY_REMOVED";
         state.boundaryLastHint = "";
         RuntimeStateStorage.addBoundaryEvent(
-                zone.id,
-                rule.id,
-                entity.getUuid(),
-                "BOUNDARY_REMOVED",
-                "Managed mob removed after staying outside the zone too long.",
-                entity.getType().toString(),
-                info.role,
-                info.forced,
-                entity.getBlockX(),
-                entity.getBlockY(),
-                entity.getBlockZ(),
-                "discard"
+                zone.id, rule.id, entity.getUuid(),
+                "BOUNDARY_REMOVED", "Managed mob removed after staying outside the zone too long.",
+                entity.getType().toString(), info.role, info.forced,
+                entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(), "discard"
         );
         MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, info.forced, true);
         RuntimeStateStorage.markDirty(zone.id);

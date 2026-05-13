@@ -27,7 +27,7 @@ public class RuntimeTickHandler {
         }
 
         if (tickCounter % Math.max(1, config.boundaryGlobalCheckIntervalTicks) == 0) {
-            BoundaryControlManager.tick(server);
+            BoundaryControlManager.tick(server, tickCounter);
         }
 
         if (tickCounter % config.resyncIntervalTicks == 0) {
