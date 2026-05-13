@@ -24,6 +24,11 @@ public class RuleRuntimeState {
     public int lastSuccessfulCompanionCount;
 
     public long lastDeathAt;
+    public long lastBoundaryActionAt;
+    public String lastBoundaryActionType = "";
+    public int boundaryOutsideCount;
+    public long boundaryLastScanAt;
+    public String boundaryLastHint = "";
 
     public long nextAttemptAt;
     public long nextAvailableAt;

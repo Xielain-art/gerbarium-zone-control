@@ -107,6 +107,9 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         rows.child(kv("Enabled", boolText(zone.enabled)));
         rows.child(kv("Active", boolText(zone.active)));
         rows.child(kv("Nearby players", String.valueOf(zone.nearbyPlayers)));
+        rows.child(kv("Boundary control enabled", boolText(zone.boundaryControlEnabled)));
+        rows.child(kv("Boundary scan padding", String.valueOf(zone.boundaryScanPadding)));
+        rows.child(kv("Boundary outside mobs", String.valueOf(zone.boundaryOutsideCount)));
         rows.child(kv("Last player seen", TimeUtil.formatRelative(zone.lastPlayerSeenAt)));
         rows.child(kv("Last activated", TimeUtil.formatRelative(zone.lastActivatedAt)));
         rows.child(kv("Last deactivated", TimeUtil.formatRelative(zone.lastDeactivatedAt)));
@@ -129,6 +132,8 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         rows.child(kv("State file", boolText(zone.stateFileExists)));
         rows.child(kv("Pending activation", boolText(zone.pendingActivation)));
         rows.child(kv("Priority", String.valueOf(zone.priority)));
+        rows.child(kv("Boundary control enabled", boolText(zone.boundaryControlEnabled)));
+        rows.child(kv("Boundary scan padding", String.valueOf(zone.boundaryScanPadding)));
         return rows;
     }
 
@@ -163,8 +168,12 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         card.child(kv("Companions alive", String.valueOf(rule.encounterCompanionsAlive)));
         card.child(kv("Next action", valueOrDash(rule.nextActionText)));
         card.child(kv("Hint", valueOrDash(rule.hintText)));
+        card.child(kv("Boundary status", valueOrDash(rule.boundaryStatus)));
         if (rule.warningText != null && !rule.warningText.isBlank()) {
             card.child(Components.label(Text.literal("Warning: " + rule.warningText)).color(Color.ofRgb(0xFCA5A5)).margins(Insets.top(2)));
+        }
+        if (rule.boundaryHint != null && !rule.boundaryHint.isBlank()) {
+            card.child(Components.label(Text.literal("Boundary: " + rule.boundaryHint)).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
         }
 
         FlowLayout buttons = Containers.verticalFlow(Sizing.fill(100), Sizing.content());

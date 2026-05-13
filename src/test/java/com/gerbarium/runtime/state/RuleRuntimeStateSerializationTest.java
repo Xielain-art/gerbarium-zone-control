@@ -14,7 +14,6 @@ public class RuleRuntimeStateSerializationTest {
         state.zoneId = "test-zone";
         state.ruleId = "test-rule";
         
-        // These fields don't exist yet, so this will fail to compile
         state.timedProgressMillis = 1500L;
         state.lastTimedTickAt = 1000L;
         state.nextTimedSpawnInMillis = 5000L;

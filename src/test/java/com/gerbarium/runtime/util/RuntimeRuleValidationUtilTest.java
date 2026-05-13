@@ -1,6 +1,7 @@
 package com.gerbarium.runtime.util;
 
 import com.gerbarium.runtime.model.MobRule;
+import com.gerbarium.runtime.model.BoundaryMode;
 import com.gerbarium.runtime.model.RefillMode;
 import com.gerbarium.runtime.model.SpawnType;
 import org.junit.jupiter.api.Test;
@@ -42,5 +43,24 @@ public class RuntimeRuleValidationUtilTest {
         rule.refillMode = RefillMode.ON_ACTIVATION;
 
         assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+
+    @Test
+    void defaultBoundaryModeIsLeash() {
+        MobRule rule = new MobRule();
+
+        assertEquals(BoundaryMode.LEASH, RuntimeRuleValidationUtil.getBoundaryMode(rule));
+        assertEquals(10, rule.boundaryMaxOutsideSeconds);
+        assertEquals(40, rule.boundaryCheckIntervalTicks);
+        assertEquals(true, rule.boundaryTeleportBack);
+    }
+
+    @Test
+    void invalidBoundaryModeFailsValidation() {
+        MobRule rule = new MobRule();
+        rule.boundaryMode = "BAD";
+
+        assertEquals("FAILED_INVALID_BOUNDARY_MODE", RuntimeRuleValidationUtil.getConfigStatus(rule));
+        assertEquals("Invalid boundaryMode in zone JSON. Expected NONE, LEASH, TELEPORT_BACK, REMOVE_OUTSIDE.", RuntimeRuleValidationUtil.getBoundaryModeHint(rule));
     }
 }

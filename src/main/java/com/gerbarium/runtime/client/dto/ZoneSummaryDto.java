@@ -8,6 +8,8 @@ public class ZoneSummaryDto {
     public String name;
     public boolean enabled;
     public String dimension;
+    public boolean boundaryControlEnabled;
+    public int boundaryScanPadding;
     public boolean active;
     public boolean pendingActivation;
     public int nearbyPlayers;
@@ -22,6 +24,7 @@ public class ZoneSummaryDto {
     public long lastDeactivatedAt;
     public long lastPlayerSeenAt;
     public int companionsAliveTotal;
+    public int boundaryOutsideCount;
     public boolean stateFileExists = true;
     public boolean dirty;
     public String currentStatus = "";

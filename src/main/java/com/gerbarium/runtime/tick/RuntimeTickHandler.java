@@ -26,6 +26,8 @@ public class RuntimeTickHandler {
             ZoneMobSpawner.tick(server);
         }
 
+        BoundaryControlManager.tick(server);
+
         if (tickCounter % config.resyncIntervalTicks == 0) {
             MobTracker.resyncActiveZones(server);
         }

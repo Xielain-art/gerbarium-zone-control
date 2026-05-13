@@ -104,6 +104,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         }
 
         body.child(sectionCard("Config", configRows()));
+        body.child(sectionCard("Boundary Control", boundaryRows()).margins(Insets.top(8)));
         body.child(sectionCard("Counters", counterRows()).margins(Insets.top(8)));
         body.child(sectionCard("Last Attempt", attemptRows()).margins(Insets.top(8)));
         body.child(sectionCard("Last Success", successRows()).margins(Insets.top(8)));
@@ -123,6 +124,10 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         rows.child(kv("Enabled", boolText(rule.enabled)));
         rows.child(kv("Spawn type", valueOrDash(rule.spawnType)));
         rows.child(kv("Refill mode", valueOrDash(rule.refillMode)));
+        rows.child(kv("Boundary mode", valueOrDash(rule.boundaryMode)));
+        rows.child(kv("Boundary max outside seconds", String.valueOf(rule.boundaryMaxOutsideSeconds)));
+        rows.child(kv("Boundary check interval ticks", String.valueOf(rule.boundaryCheckIntervalTicks)));
+        rows.child(kv("Boundary teleport back", boolText(rule.boundaryTeleportBack)));
         rows.child(kv("Max alive", String.valueOf(rule.maxAlive)));
         rows.child(kv("Spawn count", String.valueOf(rule.spawnCount)));
         rows.child(kv("Respawn seconds", String.valueOf(rule.respawnSeconds)));
@@ -133,6 +138,24 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         rows.child(kv("Despawn when inactive", boolText(rule.despawnWhenZoneInactive)));
         rows.child(kv("Announce on spawn", boolText(rule.announceOnSpawn)));
         rows.child(kv("Timed budget", rule.timedMaxSpawnsPerActivation == null ? "null" : String.valueOf(rule.timedMaxSpawnsPerActivation)));
+        return rows;
+    }
+
+    private FlowLayout boundaryRows() {
+        FlowLayout rows = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
+        rows.child(kv("Mode", valueOrDash(rule.boundaryMode)));
+        rows.child(kv("Status", valueOrDash(rule.boundaryStatus)));
+        rows.child(kv("Outside tracked", String.valueOf(rule.boundaryOutsideCount)));
+        rows.child(kv("Last boundary action", TimeUtil.formatRelative(rule.lastBoundaryActionAt)));
+        rows.child(kv("Last boundary action type", valueOrDash(rule.lastBoundaryActionType)));
+        rows.child(kv("Boundary hint", valueOrDash(rule.boundaryHint)));
+        rows.child(Components.label(Text.literal(boundaryExplanation())).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
+        if (rule.boundaryHint != null && !rule.boundaryHint.isBlank()) {
+            rows.child(Components.label(Text.literal(rule.boundaryHint)).color(Color.ofRgb(0xFDE68A)).margins(Insets.top(2)));
+        }
+        if ("REMOVE_OUTSIDE".equalsIgnoreCase(rule.boundaryMode)) {
+            rows.child(Components.label(Text.literal("Removed mobs do not count as normal deaths.")).color(Color.ofRgb(0xFDE68A)).margins(Insets.top(2)));
+        }
         return rows;
     }
 
@@ -170,6 +193,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         rows.child(kv("Next action", valueOrDash(rule.nextActionText)));
         rows.child(kv("Hint", valueOrDash(rule.hintText)));
         rows.child(kv("Warning", valueOrDash(rule.warningText)));
+        rows.child(kv("Boundary status", valueOrDash(rule.boundaryStatus)));
         return rows;
     }
 
@@ -264,6 +288,16 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
 
     private String displayName(RuleSummaryDto rule) {
         return rule.name == null || rule.name.isBlank() ? rule.id : rule.name;
+    }
+
+    private String boundaryExplanation() {
+        return switch (valueOrDash(rule.boundaryMode)) {
+            case "NONE" -> "Mobs may leave the zone.";
+            case "LEASH" -> "Mobs are returned after staying outside too long.";
+            case "TELEPORT_BACK" -> "Mobs are teleported back inside the zone.";
+            case "REMOVE_OUTSIDE" -> "Mobs are removed if they stay outside too long.";
+            default -> valueOrDash(rule.boundaryHint);
+        };
     }
 
     private RuleSummaryDto findRule(RuntimeSnapshotDto snapshot) {

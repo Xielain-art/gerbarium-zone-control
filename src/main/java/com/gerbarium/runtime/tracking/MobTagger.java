@@ -15,6 +15,8 @@ public class MobTagger {
     public static final String TAG_PARENT_RULE_ID = "gerbarium_parent_rule_id";
     public static final String TAG_COMPANION_ID = "gerbarium_companion_id";
     public static final String TAG_CLEANUP = "gerbarium_cleanup_active";
+    public static final String TAG_OUTSIDE_SINCE = "gerbarium_outside_since";
+    public static final String TAG_LAST_BOUNDARY_ACTION_AT = "gerbarium_last_boundary_action_at";
 
     public static void tagPrimary(Entity entity, String zoneId, String ruleId, boolean forced) {
         NbtCompound nbt = ((EntityPersistentDataHolder) entity).getPersistentData();
@@ -48,5 +50,22 @@ public class MobTagger {
                 nbt.getString(TAG_MOB_ROLE),
                 nbt.getBoolean(TAG_FORCED)
         ));
+    }
+
+    public static void clearOutsideSince(Entity entity) {
+        ((EntityPersistentDataHolder) entity).getPersistentData().remove(TAG_OUTSIDE_SINCE);
+    }
+
+    public static void setOutsideSince(Entity entity, long time) {
+        ((EntityPersistentDataHolder) entity).getPersistentData().putLong(TAG_OUTSIDE_SINCE, time);
+    }
+
+    public static long getOutsideSince(Entity entity) {
+        NbtCompound nbt = ((EntityPersistentDataHolder) entity).getPersistentData();
+        return nbt.contains(TAG_OUTSIDE_SINCE) ? nbt.getLong(TAG_OUTSIDE_SINCE) : 0L;
+    }
+
+    public static void setLastBoundaryActionAt(Entity entity, long time) {
+        ((EntityPersistentDataHolder) entity).getPersistentData().putLong(TAG_LAST_BOUNDARY_ACTION_AT, time);
     }
 }

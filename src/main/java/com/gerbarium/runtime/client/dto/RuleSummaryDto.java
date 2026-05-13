@@ -13,6 +13,10 @@ public class RuleSummaryDto {
 
     // Config Details
     public String refillMode;
+    public String boundaryMode;
+    public int boundaryMaxOutsideSeconds;
+    public int boundaryCheckIntervalTicks;
+    public boolean boundaryTeleportBack;
     public int spawnCount;
     public int respawnSeconds;
     public double chance;
@@ -41,6 +45,11 @@ public class RuleSummaryDto {
     public long nextAvailableAt;
     public long nextAttemptAt;
     public long lastDeathAt;
+    public long lastBoundaryActionAt;
+    public String lastBoundaryActionType = "";
+    public int boundaryOutsideCount;
+    public long boundaryLastScanAt;
+    public String boundaryLastHint = "";
     public boolean encounterActive;
     public long encounterStartedAt;
     public long encounterClearedAt;
@@ -59,4 +68,6 @@ public class RuleSummaryDto {
     public String nextActionText = "";
     public String warningText = "";
     public String hintText = "";
+    public String boundaryStatus = "";
+    public String boundaryHint = "";
 }

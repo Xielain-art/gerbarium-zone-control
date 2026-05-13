@@ -5,6 +5,10 @@ import java.util.List;
 
 public class RuntimeSnapshotDto {
     public boolean debug;
+    public boolean boundaryControlEnabled;
+    public int boundaryGlobalCheckIntervalTicks;
+    public int boundaryScanPadding;
+    public int boundaryMaxEntitiesPerTick;
     public int totalZones;
     public int enabledZones;
     public int activeZones;

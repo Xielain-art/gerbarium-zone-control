@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.util;
 
+import com.gerbarium.runtime.model.BoundaryMode;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.RefillMode;
 import com.gerbarium.runtime.model.SpawnType;
@@ -19,6 +20,18 @@ public final class RuntimeRuleValidationUtil {
             return "FAILED_INVALID_RULE_CONFIG";
         }
 
+        if (getBoundaryMode(rule) == null) {
+            return "FAILED_INVALID_BOUNDARY_MODE";
+        }
+
+        if (rule.boundaryMaxOutsideSeconds < 0) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
+        if (rule.boundaryCheckIntervalTicks <= 0) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
         return null;
     }
 
@@ -33,5 +46,23 @@ public final class RuntimeRuleValidationUtil {
         }
 
         return null;
+    }
+
+    public static BoundaryMode getBoundaryMode(MobRule rule) {
+        return rule == null ? null : BoundaryMode.from(rule.boundaryMode);
+    }
+
+    public static String getBoundaryModeHint(MobRule rule) {
+        if (rule == null) {
+            return null;
+        }
+        return getBoundaryMode(rule) == null ? "Invalid boundaryMode in zone JSON. Expected NONE, LEASH, TELEPORT_BACK, REMOVE_OUTSIDE." : null;
+    }
+
+    public static String getBoundaryIntervalWarning(MobRule rule) {
+        if (rule == null) {
+            return null;
+        }
+        return rule.boundaryCheckIntervalTicks < 20 ? "Boundary check interval below the recommended 20 ticks." : null;
     }
 }

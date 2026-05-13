@@ -13,6 +13,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -189,6 +190,33 @@ public class RuntimeStateStorage {
         
         ZoneStateFile zf = getZoneState(zoneId);
         zf.recentEvents.add(0, new RuntimeEvent(System.currentTimeMillis(), zoneId, ruleId, type, message));
+        if (zf.recentEvents.size() > 200) {
+            zf.recentEvents.remove(zf.recentEvents.size() - 1);
+        }
+        markDirty(zoneId);
+    }
+
+    public static void addBoundaryEvent(String zoneId, String ruleId, UUID entityUuid, String type, String message,
+                                        String entityType, String role, boolean forced, int x, int y, int z,
+                                        String action) {
+        String key = zoneId + ":" + (ruleId != null ? ruleId : "null") + ":" + (entityUuid == null ? "null" : entityUuid) + ":" + type;
+        long now = System.currentTimeMillis();
+        Long lastTime = lastEventTimes.get(key);
+        if (lastTime != null && (now - lastTime) < EVENT_RATE_LIMIT_MILLIS) {
+            return;
+        }
+        lastEventTimes.put(key, now);
+
+        RuntimeEvent event = new RuntimeEvent(now, zoneId, ruleId, type, message);
+        event.entityType = entityType;
+        event.role = role;
+        event.forced = forced;
+        event.x = x;
+        event.y = y;
+        event.z = z;
+        event.action = action;
+        ZoneStateFile zf = getZoneState(zoneId);
+        zf.recentEvents.add(0, event);
         if (zf.recentEvents.size() > 200) {
             zf.recentEvents.remove(zf.recentEvents.size() - 1);
         }

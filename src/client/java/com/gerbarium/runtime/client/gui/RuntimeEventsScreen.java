@@ -204,6 +204,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
             case "PACK" -> event.type.startsWith("PACK_");
             case "UNIQUE" -> event.type.startsWith("UNIQUE_");
             case "FORCE" -> event.type.startsWith("FORCE_");
+            case "BOUNDARY" -> event.type.startsWith("BOUNDARY_");
             case "RULE" -> event.type.startsWith("RULE_");
             case "STATE" -> event.type.startsWith("STATE_") || event.type.startsWith("COOLDOWN_");
             case "SYSTEM" -> event.type.equals("RELOAD") || event.type.equals("ORPHANS_CLEANED");
@@ -238,6 +239,12 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
         card.child(top);
 
         card.child(Components.label(Text.literal(event.message == null || event.message.isBlank() ? "-" : event.message)).color(Color.ofRgb(0xFFFFFF)).margins(Insets.top(4)));
+        if (event.entityType != null && !event.entityType.isBlank()) {
+            card.child(Components.label(Text.literal("Entity: " + event.entityType + (event.role == null || event.role.isBlank() ? "" : " / " + event.role) + (event.forced ? " / forced" : ""))).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
+        }
+        if (event.action != null && !event.action.isBlank()) {
+            card.child(Components.label(Text.literal("Action: " + event.action + " @ " + event.x + "," + event.y + "," + event.z)).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
+        }
         return card;
     }
 
@@ -247,6 +254,9 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
         }
         if (type.contains("FAILED") || type.contains("ERROR")) {
             return 0xFCA5A5;
+        }
+        if (type.contains("BOUNDARY")) {
+            return 0xFDE68A;
         }
         if (type.contains("SUCCESS")) {
             return 0x86EFAC;
@@ -290,7 +300,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     private void cycleTypeFilter() {
-        String[] filters = {"ALL", "ZONE", "PACK", "UNIQUE", "FORCE", "RULE", "STATE", "SYSTEM"};
+        String[] filters = {"ALL", "ZONE", "PACK", "UNIQUE", "FORCE", "BOUNDARY", "RULE", "STATE", "SYSTEM"};
         typeFilter = nextValue(filters, typeFilter);
         page = 0;
         rebuildEventsList();

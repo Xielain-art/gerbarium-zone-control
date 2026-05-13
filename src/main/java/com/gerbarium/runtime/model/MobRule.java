@@ -10,6 +10,10 @@ public class MobRule {
     public boolean enabled = true;
     public SpawnType spawnType = SpawnType.PACK;
     public RefillMode refillMode = RefillMode.ON_ACTIVATION;
+    public String boundaryMode = BoundaryMode.LEASH.name();
+    public int boundaryMaxOutsideSeconds = 10;
+    public int boundaryCheckIntervalTicks = 40;
+    public boolean boundaryTeleportBack = true;
     public int maxAlive = 10;
     public int spawnCount = 4;
     public int respawnSeconds = 900;

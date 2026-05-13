@@ -1,6 +1,7 @@
 package com.gerbarium.runtime.admin;
 
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
+import com.gerbarium.runtime.config.RuntimeConfig;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.RefillMode;
 import com.gerbarium.runtime.model.SpawnType;
@@ -59,6 +60,7 @@ public class RuntimeQueryService {
         sb.append("Managed companions alive: ").append(totalCompanionsAlive).append("\n");
         sb.append("Dirty states: ").append(dirtyStates).append("\n");
         sb.append("Debug: ").append(RuntimeConfigStorage.getConfig().debug ? "ON" : "OFF").append("\n");
+        sb.append("Boundary control: ").append(RuntimeConfigStorage.getConfig().boundaryControlEnabled ? "ON" : "OFF").append("\n");
         sb.append("Config path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getZonesDir()).append("\n");
         sb.append("States path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getStorageRoot().resolve("states")).append("\n");
         sb.append("Archive path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getStatesArchiveDir()).append("\n");
@@ -116,6 +118,16 @@ public class RuntimeQueryService {
         }
         sb.append("Active: ").append(zState.active).append("\n");
         sb.append("Nearby Players: ").append(zState.nearbyPlayers.size()).append("\n");
+        RuntimeConfig config = RuntimeConfigStorage.getConfig();
+        int boundaryOutsideCount = zone.mobs.stream()
+                .mapToInt(rule -> {
+                    RuleRuntimeState state = zf.rules.get(rule.id);
+                    return state == null ? 0 : state.boundaryOutsideCount;
+                })
+                .sum();
+        sb.append("Boundary Control Enabled: ").append(config.boundaryControlEnabled).append("\n");
+        sb.append("Boundary Scan Padding: ").append(config.boundaryScanPadding).append("\n");
+        sb.append("Boundary Outside Mobs: ").append(boundaryOutsideCount).append("\n");
         sb.append("Current Status: ").append(worldMissing ? "FAILED_WORLD_UNAVAILABLE" : (zone.enabled ? (zState.active ? "ACTIVE" : "INACTIVE") : "DISABLED")).append("\n");
 
         if (pState != null) {
@@ -353,6 +365,10 @@ public class RuntimeQueryService {
         sb.append("Respawn Seconds: ").append(rule.respawnSeconds).append("\n");
         sb.append("Chance: ").append(rule.chance).append("\n");
         sb.append("Companions: ").append(rule.companions.size()).append(" configured\n");
+        sb.append("Boundary Mode: ").append(rule.boundaryMode).append("\n");
+        sb.append("Boundary Max Outside Seconds: ").append(rule.boundaryMaxOutsideSeconds).append("\n");
+        sb.append("Boundary Check Interval Ticks: ").append(rule.boundaryCheckIntervalTicks).append("\n");
+        sb.append("Boundary Teleport Back: ").append(rule.boundaryTeleportBack).append("\n");
         if (worldMissing) {
             sb.append("World Status: FAILED_WORLD_UNAVAILABLE\n");
         }
@@ -379,6 +395,10 @@ public class RuntimeQueryService {
         } else {
             currentStatus = rule.enabled ? (zone.enabled ? (zState.active ? "READY_OR_COOLDOWN" : "INACTIVE") : "DISABLED") : "DISABLED";
         }
+        sb.append("  Boundary mode: ").append(rule.boundaryMode).append("\n");
+        sb.append("  Boundary status: ").append(currentStatus).append("\n");
+        sb.append("  Boundary outside count: ").append(rs.boundaryOutsideCount).append("\n");
+        sb.append("  Boundary last action: ").append(TimeUtil.formatRelative(rs.lastBoundaryActionAt)).append(" (").append(valueOrDash(rs.lastBoundaryActionType)).append(")\n");
         sb.append("  Current status: ").append(currentStatus).append("\n");
         sb.append("\n");
 
@@ -407,6 +427,25 @@ public class RuntimeQueryService {
             sb.append("  Next attempt: ").append(TimeUtil.formatRelative(rs.nextAttemptAt)).append("\n");
         }
 
+        sb.append("\nBoundary Control:\n");
+        sb.append("  Mode: ").append(rule.boundaryMode).append("\n");
+        sb.append("  Max outside seconds: ").append(rule.boundaryMaxOutsideSeconds).append("\n");
+        sb.append("  Check interval ticks: ").append(rule.boundaryCheckIntervalTicks).append("\n");
+        sb.append("  Teleport back: ").append(rule.boundaryTeleportBack).append("\n");
+        String boundaryStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        if (boundaryStatus != null && boundaryStatus.equals("FAILED_INVALID_BOUNDARY_MODE")) {
+            sb.append("  Status: ").append(boundaryStatus).append("\n");
+            sb.append("  Hint: ").append(valueOrDash(RuntimeRuleValidationUtil.getBoundaryModeHint(rule))).append("\n");
+        } else {
+            sb.append("  Status: ").append(rs.boundaryOutsideCount > 0 ? "TRACKING_OUTSIDE" : "OK").append("\n");
+            if (rs.lastBoundaryActionAt > 0) {
+                sb.append("  Last boundary action: ").append(TimeUtil.formatRelative(rs.lastBoundaryActionAt)).append(" (").append(valueOrDash(rs.lastBoundaryActionType)).append(")\n");
+            }
+            if (rs.boundaryLastHint != null && !rs.boundaryLastHint.isBlank()) {
+                sb.append("  Hint: ").append(rs.boundaryLastHint).append("\n");
+            }
+        }
+
         return sb.toString();
     }
 
@@ -433,6 +472,21 @@ public class RuntimeQueryService {
                 sb.append(" / ").append(event.ruleId);
             }
             sb.append(" / ").append(event.type).append(": ").append(event.message);
+            if (event.entityType != null && !event.entityType.isBlank()) {
+                sb.append(" | entity=").append(event.entityType);
+            }
+            if (event.role != null && !event.role.isBlank()) {
+                sb.append(" | role=").append(event.role);
+            }
+            if (event.forced) {
+                sb.append(" | forced=true");
+            }
+            if (event.action != null && !event.action.isBlank()) {
+                sb.append(" | action=").append(event.action);
+            }
+            if (event.action != null && !event.action.isBlank()) {
+                sb.append(" | pos=").append(event.x).append(",").append(event.y).append(",").append(event.z);
+            }
             sb.append("\n");
         }
 
@@ -458,6 +512,16 @@ public class RuntimeQueryService {
                 sb.append(event.ruleId).append(" / ");
             }
             sb.append(event.type).append(": ").append(event.message);
+            if (event.entityType != null && !event.entityType.isBlank()) {
+                sb.append(" | entity=").append(event.entityType);
+            }
+            if (event.role != null && !event.role.isBlank()) {
+                sb.append(" | role=").append(event.role);
+            }
+            if (event.action != null && !event.action.isBlank()) {
+                sb.append(" | action=").append(event.action);
+                sb.append(" | pos=").append(event.x).append(",").append(event.y).append(",").append(event.z);
+            }
             sb.append("\n");
         }
 
@@ -483,6 +547,10 @@ public class RuntimeQueryService {
         for (RuntimeEvent event : events) {
             sb.append("[").append(TimeUtil.formatRelative(event.time, now)).append("] ");
             sb.append(event.type).append(": ").append(event.message);
+            if (event.action != null && !event.action.isBlank()) {
+                sb.append(" | action=").append(event.action);
+                sb.append(" | pos=").append(event.x).append(",").append(event.y).append(",").append(event.z);
+            }
             sb.append("\n");
         }
 

@@ -6,4 +6,11 @@ public class RuntimeEventDto {
     public String ruleId;
     public String type;
     public String message;
+    public String entityType;
+    public String role;
+    public boolean forced;
+    public String action;
+    public int x;
+    public int y;
+    public int z;
 }
