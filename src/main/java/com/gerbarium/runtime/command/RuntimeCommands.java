@@ -153,7 +153,7 @@ public class RuntimeCommands {
                         .then(literal("status")
                             .executes(context -> {
                                 String zoneId = StringArgumentType.getString(context, "zoneId");
-                                String status = RuntimeQueryService.getZoneStatusString(zoneId);
+                                String status = RuntimeQueryService.getZoneStatusString(zoneId, context.getSource().getServer());
                                 context.getSource().sendFeedback(() -> Text.literal(status), false);
                                 return 1;
                             })
@@ -161,7 +161,7 @@ public class RuntimeCommands {
                         .then(literal("schedule")
                             .executes(context -> {
                                 String zoneId = StringArgumentType.getString(context, "zoneId");
-                                String schedule = RuntimeQueryService.getZoneScheduleString(zoneId);
+                                String schedule = RuntimeQueryService.getZoneScheduleString(zoneId, context.getSource().getServer());
                                 context.getSource().sendFeedback(() -> Text.literal(schedule), false);
                                 return 1;
                             })
@@ -225,7 +225,7 @@ public class RuntimeCommands {
                                 .executes(context -> {
                                     String zoneId = StringArgumentType.getString(context, "zoneId");
                                     String ruleId = StringArgumentType.getString(context, "ruleId");
-                                    String status = RuntimeQueryService.getRuleStatusString(zoneId, ruleId);
+                                    String status = RuntimeQueryService.getRuleStatusString(zoneId, ruleId, context.getSource().getServer());
                                     context.getSource().sendFeedback(() -> Text.literal(status), false);
                                     return 1;
                                 })

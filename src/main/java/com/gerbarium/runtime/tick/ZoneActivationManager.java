@@ -6,10 +6,10 @@ import com.gerbarium.runtime.state.ZoneRuntimePersistentState;
 import com.gerbarium.runtime.state.ZoneRuntimeState;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneRepository;
+import com.gerbarium.runtime.util.RuntimeWorldUtil;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 
 import java.util.ArrayList;
@@ -80,7 +80,7 @@ public class ZoneActivationManager {
 
         // Handle despawnWhenZoneInactive
         boolean anyDespawned = false;
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world != null) {
             Box box = new Box(
                     Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),

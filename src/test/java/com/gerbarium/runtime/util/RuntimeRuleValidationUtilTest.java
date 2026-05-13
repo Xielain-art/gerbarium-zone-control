@@ -1,0 +1,46 @@
+package com.gerbarium.runtime.util;
+
+import com.gerbarium.runtime.model.MobRule;
+import com.gerbarium.runtime.model.RefillMode;
+import com.gerbarium.runtime.model.SpawnType;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+public class RuntimeRuleValidationUtilTest {
+    @Test
+    void uniqueTimedIsAllowed() {
+        MobRule rule = new MobRule();
+        rule.spawnType = SpawnType.UNIQUE;
+        rule.refillMode = RefillMode.TIMED;
+
+        assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+
+    @Test
+    void packAfterDeathIsAllowed() {
+        MobRule rule = new MobRule();
+        rule.spawnType = SpawnType.PACK;
+        rule.refillMode = RefillMode.AFTER_DEATH;
+
+        assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+
+    @Test
+    void blankEntityIsInvalid() {
+        MobRule rule = new MobRule();
+        rule.entity = " ";
+
+        assertEquals("FAILED_INVALID_ENTITY", RuntimeRuleValidationUtil.getEntityStatus(rule));
+    }
+
+    @Test
+    void validPackActivationConfigPasses() {
+        MobRule rule = new MobRule();
+        rule.spawnType = SpawnType.PACK;
+        rule.refillMode = RefillMode.ON_ACTIVATION;
+
+        assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+}

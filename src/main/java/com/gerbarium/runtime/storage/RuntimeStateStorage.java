@@ -20,6 +20,8 @@ public class RuntimeStateStorage {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path STORAGE_ROOT = FabricLoader.getInstance().getConfigDir().resolve("gerbarium/zones-control");
     private static final Path STATES_DIR = STORAGE_ROOT.resolve("states");
+    private static final Path STATES_ARCHIVE_DIR = STORAGE_ROOT.resolve("states-archive");
+    private static final Path ZONES_DIR = FabricLoader.getInstance().getConfigDir().resolve("gerbarium/zones");
     private static final Path OLD_STATE_FILE = STORAGE_ROOT.resolve("runtime-state.json");
     private static final Path MIGRATION_DONE_MARKER = STORAGE_ROOT.resolve("runtime-state.migration-done");
     
@@ -36,7 +38,11 @@ public class RuntimeStateStorage {
     public static ZoneStateFile getZoneState(String zoneId) {
         return states.computeIfAbsent(zoneId, id -> {
             ZoneStateFile f = loadZone(id);
-            return f != null ? f : new ZoneStateFile(id);
+            if (f == null) {
+                return new ZoneStateFile(id);
+            }
+            ensureStateShape(f, id);
+            return f;
         });
     }
 
@@ -56,16 +62,13 @@ public class RuntimeStateStorage {
 
     public static void loadAll(Collection<Zone> loadedZones) {
         try {
-            Files.createDirectories(STATES_DIR);
-            
-            // Check for migration
-            if (Files.exists(OLD_STATE_FILE) && !Files.exists(MIGRATION_DONE_MARKER)) {
-                performMigration();
-            }
+            ensureStorageDirectories();
+            touchMigrationMarkerIfNeeded();
 
             for (Zone zone : loadedZones) {
                 ZoneStateFile zf = loadZone(zone.id);
                 if (zf != null) {
+                    ensureStateShape(zf, zone.id);
                     states.put(zone.id, zf);
                 }
             }
@@ -74,18 +77,14 @@ public class RuntimeStateStorage {
         }
     }
 
-    private static void performMigration() {
-        GerbariumRegionsRuntime.LOGGER.info("Starting runtime-state migration...");
-        try (FileReader reader = new FileReader(OLD_STATE_FILE.toFile())) {
-            // Very simplified migration for MVP
-            // Reads old format if it was just a raw ZoneStateFile or map-based
-            // Since the old format was monolithic, we'd need its exact structure.
-            // Assuming old format had Map<String, ZoneRuntimePersistentState> zones and Map<String, RuleRuntimeState> rules
-            // We skip complex migration if it's too risky and just start fresh.
-            Files.createFile(MIGRATION_DONE_MARKER);
-            GerbariumRegionsRuntime.LOGGER.info("Migration finished (marker created).");
-        } catch (Exception e) {
-            GerbariumRegionsRuntime.LOGGER.error("Migration failed", e);
+    private static void touchMigrationMarkerIfNeeded() {
+        try {
+            if (Files.exists(OLD_STATE_FILE) && !Files.exists(MIGRATION_DONE_MARKER)) {
+                Files.createFile(MIGRATION_DONE_MARKER);
+                GerbariumRegionsRuntime.LOGGER.info("Old monolithic runtime-state.json ignored; per-zone state is authoritative now.");
+            }
+        } catch (IOException e) {
+            GerbariumRegionsRuntime.LOGGER.error("Failed to create migration marker", e);
         }
     }
 
@@ -98,6 +97,44 @@ public class RuntimeStateStorage {
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to load zone state: " + zoneId, e);
             return null;
+        }
+    }
+
+    public static Path getZoneStatePath(String zoneId) {
+        return STATES_DIR.resolve(zoneId + ".runtime-state.json");
+    }
+
+    public static Path getZonesDir() {
+        return ZONES_DIR;
+    }
+
+    public static Path getStorageRoot() {
+        return STORAGE_ROOT;
+    }
+
+    public static Path getStatesArchiveDir() {
+        return STATES_ARCHIVE_DIR;
+    }
+
+    private static void ensureStorageDirectories() throws IOException {
+        Files.createDirectories(ZONES_DIR);
+        Files.createDirectories(STORAGE_ROOT);
+        Files.createDirectories(STATES_DIR);
+    }
+
+    private static void ensureStateShape(ZoneStateFile zf, String zoneId) {
+        if (zf.zone == null) {
+            zf.zone = new ZoneRuntimePersistentState();
+        }
+        if (zf.zone.zoneId == null || zf.zone.zoneId.isBlank()) {
+            zf.zone.zoneId = zoneId;
+        }
+        zf.zoneId = zoneId;
+        if (zf.rules == null) {
+            zf.rules = new HashMap<>();
+        }
+        if (zf.recentEvents == null) {
+            zf.recentEvents = new ArrayList<>();
         }
     }
 
@@ -124,8 +161,8 @@ public class RuntimeStateStorage {
         if (zf == null) return;
 
         try {
-            Files.createDirectories(STATES_DIR);
-            Path path = STATES_DIR.resolve(zoneId + ".runtime-state.json");
+            ensureStorageDirectories();
+            Path path = getZoneStatePath(zoneId);
             try (FileWriter writer = new FileWriter(path.toFile())) {
                 GSON.toJson(zf, writer);
             }
@@ -162,7 +199,7 @@ public class RuntimeStateStorage {
         states.remove(zoneId);
         dirtyZoneIds.remove(zoneId);
         try {
-            Files.deleteIfExists(STATES_DIR.resolve(zoneId + ".runtime-state.json"));
+            Files.deleteIfExists(getZoneStatePath(zoneId));
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to delete zone state file: " + zoneId, e);
         }

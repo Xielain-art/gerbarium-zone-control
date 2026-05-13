@@ -15,6 +15,9 @@ import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
 import com.gerbarium.runtime.tracking.MobTracker;
 import com.gerbarium.runtime.util.TimeUtil;
+import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
+import com.gerbarium.runtime.util.RuntimeWorldUtil;
+import net.minecraft.server.MinecraftServer;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -56,6 +59,9 @@ public class RuntimeQueryService {
         sb.append("Managed companions alive: ").append(totalCompanionsAlive).append("\n");
         sb.append("Dirty states: ").append(dirtyStates).append("\n");
         sb.append("Debug: ").append(RuntimeConfigStorage.getConfig().debug ? "ON" : "OFF").append("\n");
+        sb.append("Config path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getZonesDir()).append("\n");
+        sb.append("States path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getStorageRoot().resolve("states")).append("\n");
+        sb.append("Archive path: ").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getStatesArchiveDir()).append("\n");
         
         return sb.toString();
     }
@@ -72,11 +78,14 @@ public class RuntimeQueryService {
             ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
             
             sb.append("- ").append(zone.id);
+            sb.append(" | name: ").append(zone.name != null && !zone.name.isBlank() ? zone.name : zone.id);
             sb.append(" | file: yes");
             sb.append(" | dirty: ").append(zf.dirty ? "yes" : "no");
             sb.append(" | rules: ").append(zf.rules.size());
             sb.append(" | events: ").append(zf.recentEvents.size());
             sb.append(" | last activated: ").append(TimeUtil.formatRelative(zf.zone.lastActivatedAt));
+            sb.append(" | last deactivated: ").append(TimeUtil.formatRelative(zf.zone.lastDeactivatedAt));
+            sb.append(" | path: ").append(RuntimeStateStorage.getZoneStatePath(zone.id));
             sb.append("\n");
         }
         
@@ -84,6 +93,10 @@ public class RuntimeQueryService {
     }
     
     public static String getZoneStatusString(String zoneId) {
+        return getZoneStatusString(zoneId, null);
+    }
+
+    public static String getZoneStatusString(String zoneId, MinecraftServer server) {
         Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
         if (zoneOpt.isEmpty()) return "Zone not found: " + zoneId;
 
@@ -94,10 +107,16 @@ public class RuntimeQueryService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("Zone: ").append(zone.id).append("\n");
+        sb.append("Name: ").append(zone.name != null && !zone.name.isBlank() ? zone.name : zone.id).append("\n");
         sb.append("Enabled: ").append(zone.enabled).append("\n");
         sb.append("Dimension: ").append(zone.dimension).append("\n");
+        boolean worldMissing = server != null && RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty();
+        if (worldMissing) {
+            sb.append("World Status: FAILED_WORLD_UNAVAILABLE\n");
+        }
         sb.append("Active: ").append(zState.active).append("\n");
         sb.append("Nearby Players: ").append(zState.nearbyPlayers.size()).append("\n");
+        sb.append("Current Status: ").append(worldMissing ? "FAILED_WORLD_UNAVAILABLE" : (zone.enabled ? (zState.active ? "ACTIVE" : "INACTIVE") : "DISABLED")).append("\n");
 
         if (pState != null) {
             sb.append("Last Player Seen: ").append(TimeUtil.formatRelative(pState.lastPlayerSeenAt)).append("\n");
@@ -109,8 +128,8 @@ public class RuntimeQueryService {
 
         sb.append("\nRules Summary:\n");
         for (MobRule rule : zone.mobs) {
-            int pAlive = MobTracker.getPrimaryAliveCount(zoneId, rule.id);
-            int cAlive = MobTracker.getCompanionAliveCount(zoneId, rule.id);
+            int pAlive = MobTracker.getNormalPrimaryAliveCount(zoneId, rule.id);
+            int cAlive = MobTracker.getNormalCompanionAliveCount(zoneId, rule.id);
             RuleRuntimeState rs = zf.rules.get(rule.id);
             
             sb.append("- ").append(rule.id).append(" (").append(rule.name).append("): ");
@@ -182,6 +201,10 @@ public class RuntimeQueryService {
     }
 
     public static String getZoneScheduleString(String zoneId) {
+        return getZoneScheduleString(zoneId, null);
+    }
+
+    public static String getZoneScheduleString(String zoneId, MinecraftServer server) {
         Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
         if (zoneOpt.isEmpty()) return "Zone not found: " + zoneId;
 
@@ -189,23 +212,31 @@ public class RuntimeQueryService {
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         ZoneStateFile zf = RuntimeStateStorage.getZoneState(zoneId);
         long now = System.currentTimeMillis();
+        boolean worldMissing = server != null && RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty();
 
         StringBuilder sb = new StringBuilder();
         sb.append("Schedule for zone: ").append(zoneId).append("\n");
         sb.append("Zone active: ").append(zState.active).append("\n\n");
+        if (worldMissing) {
+            sb.append("World status: FAILED_WORLD_UNAVAILABLE\n\n");
+        }
 
         for (MobRule rule : zone.mobs) {
             RuleRuntimeState rs = zf.rules.get(rule.id);
             if (rs == null) rs = new RuleRuntimeState();
 
-            int pAlive = MobTracker.getPrimaryAliveCount(zoneId, rule.id);
-            int cAlive = MobTracker.getCompanionAliveCount(zoneId, rule.id);
+            int pAlive = MobTracker.getNormalPrimaryAliveCount(zoneId, rule.id);
+            int cAlive = MobTracker.getNormalCompanionAliveCount(zoneId, rule.id);
 
             sb.append("Rule: ").append(rule.id).append(" (").append(rule.name).append(")\n");
             sb.append("  Type: ").append(rule.spawnType).append(" / ").append(rule.refillMode).append("\n");
             sb.append("  Alive: ").append(pAlive).append("/").append(rule.maxAlive).append(" primary, ").append(cAlive).append(" companions\n");
 
-            if (rule.spawnType == SpawnType.PACK) {
+            if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) {
+                sb.append("  Status: FAILED_INVALID_RULE_CONFIG\n");
+            } else if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
+                sb.append("  Status: FAILED_INVALID_ENTITY\n");
+            } else if (rule.spawnType == SpawnType.PACK) {
                 if (rule.refillMode == RefillMode.TIMED) {
                     int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
                     sb.append("  TIMED interval: ").append(rule.respawnSeconds).append("s\n");
@@ -289,6 +320,10 @@ public class RuntimeQueryService {
     }
 
     public static String getRuleStatusString(String zoneId, String ruleId) {
+        return getRuleStatusString(zoneId, ruleId, null);
+    }
+
+    public static String getRuleStatusString(String zoneId, String ruleId, MinecraftServer server) {
         Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
         if (zoneOpt.isEmpty()) return "Zone not found: " + zoneId;
 
@@ -297,12 +332,14 @@ public class RuntimeQueryService {
         if (ruleOpt.isEmpty()) return "Rule not found: " + ruleId;
 
         MobRule rule = ruleOpt.get();
+        ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         ZoneStateFile zf = RuntimeStateStorage.getZoneState(zoneId);
         RuleRuntimeState rs = zf.rules.get(ruleId);
         if (rs == null) rs = new RuleRuntimeState();
+        boolean worldMissing = server != null && RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty();
 
-        int pAlive = MobTracker.getPrimaryAliveCount(zoneId, ruleId);
-        int cAlive = MobTracker.getCompanionAliveCount(zoneId, ruleId);
+        int pAlive = MobTracker.getNormalPrimaryAliveCount(zoneId, ruleId);
+        int cAlive = MobTracker.getNormalCompanionAliveCount(zoneId, ruleId);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Rule: ").append(ruleId).append("\n");
@@ -316,6 +353,9 @@ public class RuntimeQueryService {
         sb.append("Respawn Seconds: ").append(rule.respawnSeconds).append("\n");
         sb.append("Chance: ").append(rule.chance).append("\n");
         sb.append("Companions: ").append(rule.companions.size()).append(" configured\n");
+        if (worldMissing) {
+            sb.append("World Status: FAILED_WORLD_UNAVAILABLE\n");
+        }
         sb.append("\n");
 
         sb.append("Current State:\n");
@@ -329,6 +369,17 @@ public class RuntimeQueryService {
         sb.append("  Total successes: ").append(rs.totalSuccesses).append("\n");
         sb.append("  Total primary spawned: ").append(rs.totalPrimarySpawned).append("\n");
         sb.append("  Total companions spawned: ").append(rs.totalCompanionsSpawned).append("\n");
+        String currentStatus;
+        if (worldMissing) {
+            currentStatus = "FAILED_WORLD_UNAVAILABLE";
+        } else if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) {
+            currentStatus = "FAILED_INVALID_RULE_CONFIG";
+        } else if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
+            currentStatus = "FAILED_INVALID_ENTITY";
+        } else {
+            currentStatus = rule.enabled ? (zone.enabled ? (zState.active ? "READY_OR_COOLDOWN" : "INACTIVE") : "DISABLED") : "DISABLED";
+        }
+        sb.append("  Current status: ").append(currentStatus).append("\n");
         sb.append("\n");
 
         if (rule.refillMode == RefillMode.TIMED) {

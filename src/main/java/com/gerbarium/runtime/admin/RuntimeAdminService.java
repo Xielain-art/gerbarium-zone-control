@@ -1,12 +1,13 @@
 package com.gerbarium.runtime.admin;
 
 import com.gerbarium.runtime.GerbariumRegionsRuntime;
+import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.spawn.EntitySpawnService;
+import com.gerbarium.runtime.spawn.SpawnContext;
 import com.gerbarium.runtime.spawn.SpawnPositionFinder;
-import com.gerbarium.runtime.spawn.SpawnResult;
 import com.gerbarium.runtime.state.RuleRuntimeState;
 import com.gerbarium.runtime.state.RuntimeEvent;
 import com.gerbarium.runtime.state.ZoneRuntimePersistentState;
@@ -17,16 +18,16 @@ import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
 import com.gerbarium.runtime.tracking.MobTagger;
 import com.gerbarium.runtime.tracking.MobTracker;
+import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
+import com.gerbarium.runtime.util.RuntimeWorldUtil;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 public class RuntimeAdminService {
@@ -46,12 +47,21 @@ public class RuntimeAdminService {
         return result;
     }
 
+    public static ActionResultDto setDebugEnabled(boolean enabled, String adminName) {
+        RuntimeConfigStorage.getConfig().debug = enabled;
+        RuntimeConfigStorage.save();
+
+        GerbariumRegionsRuntime.LOGGER.info("Runtime debug " + (enabled ? "enabled" : "disabled") + " by " + adminName);
+
+        return new ActionResultDto(true, enabled ? "Debug enabled." : "Debug disabled.");
+    }
+
     public static ActionResultDto forceSpawnZone(String zoneId, MinecraftServer server, String adminName) {
         Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
         if (zoneOpt.isEmpty()) return new ActionResultDto(false, "Zone not found");
 
         Zone zone = zoneOpt.get();
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
@@ -61,16 +71,16 @@ public class RuntimeAdminService {
         for (MobRule rule : zone.mobs) {
             if (!rule.enabled) continue;
 
-            int alive = MobTracker.getPrimaryAliveCount(zoneId, rule.id);
-            int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.min(rule.spawnCount, rule.maxAlive - alive);
+            int alive = MobTracker.getNormalPrimaryAliveCount(zoneId, rule.id);
+            int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
 
             for (int i = 0; i < toSpawn; i++) {
                 Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
                 if (pos.isPresent()) {
-                    SpawnResult res = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), true);
-                    if (res == SpawnResult.SUCCESS) {
+                    var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
+                    if (primary != null) {
                         totalPrimary++;
-                        totalCompanions += MobTracker.getCompanionAliveCount(zoneId, rule.id) - totalCompanions;
+                        totalCompanions += EntitySpawnService.spawnCompanions(world, zone, rule, primary, SpawnContext.FORCED);
                     }
                 }
             }
@@ -98,9 +108,9 @@ public class RuntimeAdminService {
 
                     if (orphaned) {
                         if ("PRIMARY".equals(info.role)) {
-                            MobTracker.decrementPrimary(info.zoneId, info.ruleId);
+                            MobTracker.decrementPrimary(info.zoneId, info.ruleId, info.forced);
                         } else if ("COMPANION".equals(info.role)) {
-                            MobTracker.decrementCompanion(info.zoneId, info.ruleId);
+                            MobTracker.decrementCompanion(info.zoneId, info.ruleId, info.forced);
                         }
                         entity.discard();
                         removedCount++;
@@ -111,6 +121,7 @@ public class RuntimeAdminService {
 
         ActionResultDto result = new ActionResultDto(true, "Cleanup completed");
         result.removed = removedCount;
+        RuntimeStateStorage.addEvent("global", null, "ORPHANS_CLEANED", "Orphans cleanup by " + adminName + ": removed " + removedCount);
         GerbariumRegionsRuntime.LOGGER.info("Orphans cleanup by " + adminName + ". Removed: " + removedCount);
         return result;
     }
@@ -124,6 +135,9 @@ public class RuntimeAdminService {
         state.timedProgressMillis = 0;
         state.lastTimedTickAt = 0;
         state.timedSpawnedThisActivation = 0;
+        state.timedBudgetActivationId = 0;
+        state.lastTimedBudgetResetAt = 0;
+        state.timedBudgetExhausted = false;
         RuntimeStateStorage.markDirty(zoneId);
         RuntimeStateStorage.addEvent(zoneId, ruleId, "COOLDOWN_RESET", "Cooldown reset by " + adminName);
         return new ActionResultDto(true, "Cooldown reset for " + ruleId);
@@ -182,7 +196,7 @@ public class RuntimeAdminService {
         pState.lastDeactivationReason = "force_deactivate_command (" + adminName + ")";
 
         int removed = 0;
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world != null) {
             Box box = new Box(
                     Math.min(zone.min.x, zone.max.x), Math.min(zone.min.y, zone.max.y), Math.min(zone.min.z, zone.max.z),
@@ -212,7 +226,6 @@ public class RuntimeAdminService {
         for (MobRule rule : zone.mobs) {
             RuleRuntimeState state = RuntimeStateStorage.getRuleState(zoneId, rule.id);
             state.lastTimedTickAt = 0;
-            state.timedSpawnedThisActivation = 0;
 
             if (removed > 0 && rule.spawnType == SpawnType.UNIQUE) {
                 MobTracker.checkUniqueEncounterCleared(zoneId, rule.id, false, true);
@@ -232,7 +245,7 @@ public class RuntimeAdminService {
         if (zoneOpt.isEmpty()) return new ActionResultDto(false, "Zone not found");
 
         Zone zone = zoneOpt.get();
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         Box box = new Box(
@@ -267,12 +280,18 @@ public class RuntimeAdminService {
         if (ruleOpt.isEmpty()) return new ActionResultDto(false, "Rule not found");
 
         MobRule rule = ruleOpt.get();
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        if (configStatus != null) return new ActionResultDto(false, configStatus);
+
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (entityStatus != null) return new ActionResultDto(false, entityStatus);
+
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
-        int alive = MobTracker.getPrimaryAliveCount(zoneId, ruleId);
-        int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.min(rule.spawnCount, rule.maxAlive - alive);
+        int alive = MobTracker.getNormalPrimaryAliveCount(zoneId, ruleId);
+        int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
 
         int spawned = 0;
         int companionsSpawned = 0;
@@ -280,19 +299,10 @@ public class RuntimeAdminService {
         for (int i = 0; i < toSpawn; i++) {
             Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
             if (pos.isPresent()) {
-                SpawnResult res = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), true);
-                if (res == SpawnResult.SUCCESS) {
+                var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
+                if (primary != null) {
                     spawned++;
-                    companionsSpawned = MobTracker.getCompanionAliveCount(zoneId, ruleId) - companionsSpawned;
-
-                    if (rule.spawnType == SpawnType.UNIQUE) {
-                        RuleRuntimeState rs = RuntimeStateStorage.getRuleState(zoneId, ruleId);
-                        rs.encounterActive = true;
-                        rs.encounterStartedAt = System.currentTimeMillis();
-                        rs.encounterPrimaryAlive = 1;
-                        rs.encounterCompanionsAlive = MobTracker.getCompanionAliveCount(zoneId, ruleId);
-                        RuntimeStateStorage.markDirty(zoneId);
-                    }
+                    companionsSpawned += EntitySpawnService.spawnCompanions(world, zone, rule, primary, SpawnContext.FORCED);
                 }
             }
         }
@@ -314,30 +324,21 @@ public class RuntimeAdminService {
         if (ruleOpt.isEmpty()) return new ActionResultDto(false, "Rule not found");
 
         MobRule rule = ruleOpt.get();
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        if (configStatus != null) return new ActionResultDto(false, configStatus);
+
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (entityStatus != null) return new ActionResultDto(false, entityStatus);
+
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
         if (pos.isEmpty()) return new ActionResultDto(false, "No valid spawn position found");
 
-        List<com.gerbarium.runtime.model.CompanionRule> originalCompanions = rule.companions;
-        rule.companions = new java.util.ArrayList<>();
-
-        SpawnResult res = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), true);
-
-        rule.companions = originalCompanions;
-
-        if (res == SpawnResult.SUCCESS) {
-            if (rule.spawnType == SpawnType.UNIQUE) {
-                RuleRuntimeState rs = RuntimeStateStorage.getRuleState(zoneId, ruleId);
-                rs.encounterActive = true;
-                rs.encounterStartedAt = System.currentTimeMillis();
-                rs.encounterPrimaryAlive = 1;
-                rs.encounterCompanionsAlive = 0;
-                RuntimeStateStorage.markDirty(zoneId);
-            }
-
+        var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
+        if (primary != null) {
             RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_PRIMARY", "Primary force spawned by " + adminName);
 
             ActionResultDto result = new ActionResultDto(true, "Primary spawned for rule " + ruleId);
@@ -345,7 +346,7 @@ public class RuntimeAdminService {
             return result;
         }
 
-        return new ActionResultDto(false, "Spawn failed: " + res.name());
+        return new ActionResultDto(false, "Spawn failed");
     }
 
     public static ActionResultDto forceSpawnCompanions(String zoneId, String ruleId, MinecraftServer server, ServerPlayerEntity player, String adminName) {
@@ -359,13 +360,13 @@ public class RuntimeAdminService {
         MobRule rule = ruleOpt.get();
         if (rule.companions.isEmpty()) return new ActionResultDto(false, "Rule has no companions configured");
 
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         if (player == null) return new ActionResultDto(false, "Companions spawn requires a player context");
 
         net.minecraft.entity.Entity fakeParent = new net.minecraft.entity.decoration.ArmorStandEntity(world, player.getX(), player.getY(), player.getZ());
-        int spawned = EntitySpawnService.spawnCompanions(world, zone, rule, fakeParent, true);
+        int spawned = EntitySpawnService.spawnCompanions(world, zone, rule, fakeParent, SpawnContext.FORCED);
 
         RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_COMPANIONS", "Companions force spawned by " + adminName + ": " + spawned);
 
@@ -382,7 +383,7 @@ public class RuntimeAdminService {
         Optional<MobRule> ruleOpt = zone.mobs.stream().filter(m -> m.id.equals(ruleId)).findFirst();
         if (ruleOpt.isEmpty()) return new ActionResultDto(false, "Rule not found");
 
-        ServerWorld world = server.getWorld(net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.WORLD, new Identifier(zone.dimension)));
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         Box box = new Box(

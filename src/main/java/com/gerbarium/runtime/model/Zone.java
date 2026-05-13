@@ -5,7 +5,8 @@ import java.util.List;
 
 public class Zone {
     public String id;
-    public boolean enabled;
+    public String name;
+    public boolean enabled = true;
     public String dimension;
     public Vec3iJson min;
     public Vec3iJson max;

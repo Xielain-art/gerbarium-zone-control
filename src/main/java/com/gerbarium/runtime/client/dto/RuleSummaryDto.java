@@ -9,6 +9,7 @@ public class RuleSummaryDto {
     public int aliveCount;
     public int maxAlive;
     public boolean active;
+    public boolean enabled;
 
     // Config Details
     public String refillMode;
@@ -17,29 +18,43 @@ public class RuleSummaryDto {
     public double chance;
     public Integer timedMaxSpawnsPerActivation;
     public String cooldownStart;
+    public boolean spawnWhenReady;
+    public int failedSpawnRetrySeconds;
+    public boolean despawnWhenZoneInactive;
+    public boolean announceOnSpawn;
     
     // Runtime State
     public int timedSpawnedThisActivation;
     public long timedProgressMillis;
+    public long nextTimedSpawnInMillis;
     public boolean timedBudgetExhausted;
     public long lastTimedBudgetResetAt;
+    public long lastOnActivationAttemptActivationId;
+    public long knownAlive;
+    public long lastActivationSpawnAt;
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
     public String lastAttemptReason = "";
     public long lastSuccessAt;
+    public int lastSuccessfulPrimaryCount;
+    public int lastSuccessfulCompanionCount;
     public long nextAvailableAt;
     public long nextAttemptAt;
-    public long totalAttempts;
-    public long totalSuccesses;
-    
-    // UNIQUE fields
+    public long lastDeathAt;
     public boolean encounterActive;
     public long encounterStartedAt;
     public long encounterClearedAt;
     public int encounterPrimaryAlive;
     public int encounterCompanionsAlive;
+    public int lastEncounterPrimarySpawned;
+    public int lastEncounterCompanionsSpawned;
+    public long totalAttempts;
+    public long totalSuccesses;
+    public long totalPrimarySpawned;
+    public long totalCompanionsSpawned;
     
     // Display helpers
+    public String currentStatus = "";
     public String statusText = "";
     public String nextActionText = "";
     public String warningText = "";

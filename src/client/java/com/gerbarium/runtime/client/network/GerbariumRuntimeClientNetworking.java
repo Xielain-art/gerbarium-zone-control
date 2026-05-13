@@ -1,6 +1,7 @@
 package com.gerbarium.runtime.client.network;
 
 import com.gerbarium.runtime.client.gui.RuntimeZonesScreen;
+import com.gerbarium.runtime.client.gui.RuntimeSnapshotView;
 import com.gerbarium.runtime.network.GerbariumRuntimePackets;
 import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
 import com.gerbarium.runtime.admin.ActionResultDto;
@@ -23,7 +24,7 @@ public class GerbariumRuntimeClientNetworking {
             String json = buf.readString();
             client.execute(() -> {
                 RuntimeSnapshotDto snapshot = GSON.fromJson(json, RuntimeSnapshotDto.class);
-                if (client.currentScreen instanceof RuntimeZonesScreen screen) {
+                if (client.currentScreen instanceof RuntimeSnapshotView screen) {
                     screen.updateSnapshot(snapshot);
                 }
             });

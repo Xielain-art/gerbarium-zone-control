@@ -22,42 +22,52 @@ import java.util.Random;
 public class EntitySpawnService {
     private static final Random RANDOM = new Random();
 
-    public static SpawnResult spawnPrimary(ServerWorld world, Zone zone, MobRule rule, BlockPos pos, boolean forced) {
-        Optional<EntityType<?>> typeOpt = Registries.ENTITY_TYPE.getOrEmpty(new Identifier(rule.entity));
+    public static Entity spawnPrimary(ServerWorld world, Zone zone, MobRule rule, BlockPos pos, SpawnContext context) {
+        Identifier entityId = Identifier.tryParse(rule.entity);
+        if (entityId == null) {
+            GerbariumRegionsRuntime.LOGGER.warn("Invalid entity id for zone={} rule={}: {}", zone.id, rule.id, rule.entity);
+            return null;
+        }
+
+        Optional<EntityType<?>> typeOpt = Registries.ENTITY_TYPE.getOrEmpty(entityId);
         if (typeOpt.isEmpty()) {
-            return SpawnResult.FAILED_INVALID_ENTITY;
+            GerbariumRegionsRuntime.LOGGER.warn("Unknown entity type for zone={} rule={}: {}", zone.id, rule.id, rule.entity);
+            return null;
         }
 
         EntityType<?> type = typeOpt.get();
         Entity entity = type.create(world);
         if (entity == null) {
-            return SpawnResult.FAILED_UNKNOWN;
+            return null;
         }
 
         entity.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, RANDOM.nextFloat() * 360.0F, 0.0F);
         
         if (entity instanceof MobEntity mob) {
             mob.initialize(world, world.getLocalDifficulty(pos), SpawnReason.SPAWNER, null, null);
+            mob.setPersistent();
         }
 
-        MobTagger.tagPrimary(entity, zone.id, rule.id, forced);
+        MobTagger.tagPrimary(entity, zone.id, rule.id, context == SpawnContext.FORCED);
         if (world.spawnEntity(entity)) {
-            MobTracker.incrementPrimary(zone.id, rule.id);
-            
-            // Announce spawn if configured
-            if (rule.announceOnSpawn && !forced) {
-                String message = "[Gerbarium] " + rule.name + " spawned in zone " + zone.id;
+            MobTracker.incrementPrimary(zone.id, rule.id, context == SpawnContext.FORCED);
+            GerbariumRegionsRuntime.LOGGER.debug(
+                    "Spawned primary mob zone={} rule={} role=PRIMARY forced={} uuid={} pos={}",
+                    zone.id, rule.id, context == SpawnContext.FORCED, entity.getUuid(), pos
+            );
+
+            if (rule.announceOnSpawn && context == SpawnContext.NORMAL) {
+                String displayName = rule.name != null && !rule.name.isBlank() ? rule.name : rule.id;
+                String message = "[Gerbarium] " + displayName + " spawned in zone " + zone.id;
                 world.getServer().getPlayerManager().broadcast(Text.literal(message), false);
             }
-            
-            spawnCompanions(world, zone, rule, entity, forced);
-            return SpawnResult.SUCCESS;
+            return entity;
         }
 
-        return SpawnResult.FAILED_SPAWN_REJECTED;
+        return null;
     }
 
-    public static int spawnCompanions(ServerWorld world, Zone zone, MobRule parentRule, Entity primaryEntity, boolean forced) {
+    public static int spawnCompanions(ServerWorld world, Zone zone, MobRule parentRule, Entity primaryEntity, SpawnContext context) {
         int spawnedCount = 0;
         BlockPos primaryPos = primaryEntity.getBlockPos();
 
@@ -69,10 +79,17 @@ public class EntitySpawnService {
         int maxZ = Math.max(zone.min.z, zone.max.z);
 
         for (CompanionRule companion : parentRule.companions) {
-            if (!forced && RANDOM.nextDouble() > companion.chance) continue;
+            if (RANDOM.nextDouble() > companion.chance) continue;
 
-            Optional<EntityType<?>> typeOpt = Registries.ENTITY_TYPE.getOrEmpty(new Identifier(companion.entity));
-            if (typeOpt.isEmpty()) continue;
+            Identifier entityId = Identifier.tryParse(companion.entity);
+            if (entityId == null) {
+                continue;
+            }
+
+            Optional<EntityType<?>> typeOpt = Registries.ENTITY_TYPE.getOrEmpty(entityId);
+            if (typeOpt.isEmpty()) {
+                continue;
+            }
 
             EntityType<?> type = typeOpt.get();
 
@@ -87,11 +104,16 @@ public class EntitySpawnService {
 
                 if (entity instanceof MobEntity mob) {
                     mob.initialize(world, world.getLocalDifficulty(pos), SpawnReason.SPAWNER, null, null);
+                    mob.setPersistent();
                 }
 
-                MobTagger.tagCompanion(entity, zone.id, parentRule.id, companion.id, forced);
+                MobTagger.tagCompanion(entity, zone.id, parentRule.id, companion.id, context == SpawnContext.FORCED);
                 if (world.spawnEntity(entity)) {
-                    MobTracker.incrementCompanion(zone.id, parentRule.id);
+                    MobTracker.incrementCompanion(zone.id, parentRule.id, context == SpawnContext.FORCED);
+                    GerbariumRegionsRuntime.LOGGER.debug(
+                            "Spawned companion mob zone={} rule={} companion={} forced={} uuid={} pos={}",
+                            zone.id, parentRule.id, companion.id, context == SpawnContext.FORCED, entity.getUuid(), pos
+                    );
                     spawnedCount++;
                 }
             }

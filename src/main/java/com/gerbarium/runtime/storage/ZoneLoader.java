@@ -13,10 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class ZoneLoader {
     private static final Gson GSON = new GsonBuilder().create();
     private static final Path ZONES_DIR = FabricLoader.getInstance().getConfigDir().resolve("gerbarium/zones");
+    private static final Pattern SAFE_ZONE_ID = Pattern.compile("^[a-z0-9_-]+$");
 
     public static void loadAll() {
         try {
@@ -57,8 +59,18 @@ public class ZoneLoader {
                 return null;
             }
 
+            if (zone.id == null || zone.id.isBlank()) {
+                GerbariumRegionsRuntime.LOGGER.error("Zone file has missing id: " + filename);
+                return null;
+            }
+
             if (!expectedId.equals(zone.id)) {
                 GerbariumRegionsRuntime.LOGGER.error("Zone ID mismatch in " + filename + ": expected '" + expectedId + "', found '" + zone.id + "'");
+                return null;
+            }
+
+            if (!SAFE_ZONE_ID.matcher(zone.id).matches()) {
+                GerbariumRegionsRuntime.LOGGER.error("Zone ID has invalid characters in " + filename + ": " + zone.id);
                 return null;
             }
 
