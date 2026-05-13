@@ -75,6 +75,10 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
 
     private FlowLayout statsRow() {
         FlowLayout row = RuntimeUi.row();
+        if (snapshot == null) {
+            row.child(RuntimeUi.muted("Loading..."));
+            return row;
+        }
         row.child(RuntimeUi.chip("Zones", str(snapshot.totalZones), RuntimeUi.COLOR_TEXT));
         row.child(RuntimeUi.chip("Enabled", str(snapshot.enabledZones), RuntimeUi.COLOR_OK_LIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         row.child(RuntimeUi.chip("Active", str(snapshot.activeZones), RuntimeUi.COLOR_OK).margins(Insets.left(RuntimeUi.GAP_ITEM)));
