@@ -118,8 +118,6 @@ public class ZoneMobSpawner {
         if (!afterDeathCooldown) {
             state.lastOnActivationAttemptActivationId = zState.activationId;
         }
-        state.lastActivationSpawnAt = now;
-
         if (alive >= rule.maxAlive) {
             zoneState.totalSpawnAttempts++;
             RuntimeStateStorage.markDirty(zone.id);
@@ -139,6 +137,7 @@ public class ZoneMobSpawner {
             RuntimeStateStorage.markDirty(zone.id);
             return 0;
         }
+        state.lastActivationSpawnAt = now;
 
         int toSpawn = Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
         if (toSpawn <= 0) {

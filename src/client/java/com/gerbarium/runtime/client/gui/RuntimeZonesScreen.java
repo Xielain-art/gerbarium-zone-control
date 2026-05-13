@@ -19,10 +19,8 @@ import org.jetbrains.annotations.NotNull;
 public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView {
     private RuntimeSnapshotDto snapshot;
     private FlowLayout zonesList;
-    private String filterMode = "ALL";
 
-    public RuntimeZonesScreen() {
-    }
+    public RuntimeZonesScreen() {}
 
     public RuntimeZonesScreen(RuntimeSnapshotDto snapshot) {
         this.snapshot = snapshot;
@@ -42,16 +40,14 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
     }
 
     @Override
-    protected void build(FlowLayout rootComponent) {
-        rootComponent.surface(Surface.VANILLA_TRANSLUCENT)
+    protected void build(FlowLayout root) {
+        root.surface(Surface.VANILLA_TRANSLUCENT)
                 .padding(Insets.of(18))
                 .alignment(HorizontalAlignment.CENTER, VerticalAlignment.TOP);
-
-        rootComponent.child(buildHeader());
-
+        root.child(buildHeader());
         this.zonesList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        rootComponent.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), zonesList).margins(Insets.top(10)));
-
+        root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), zonesList)
+                .margins(Insets.top(RuntimeUi.GAP_SECTION)));
         if (snapshot == null) {
             requestSnapshot();
         } else {
@@ -60,249 +56,145 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
     }
 
     private FlowLayout buildHeader() {
-        FlowLayout header = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        header.surface(Surface.PANEL).padding(Insets.of(10));
-
-        FlowLayout titleRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+        FlowLayout header = RuntimeUi.card();
+        FlowLayout titleRow = RuntimeUi.row();
         titleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        titleRow.child(Components.label(Text.literal("Gerbarium Regions Runtime")).sizing(Sizing.fixed(260)));
-        titleRow.child(Components.label(Text.literal(summaryText())).color(Color.ofRgb(0xAAB2C6)));
+        titleRow.child(RuntimeUi.title("Gerbarium Regions Runtime"));
+        titleRow.child(RuntimeUi.muted(summaryText()).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         header.child(titleRow);
-
-        header.child(summaryRow().margins(Insets.top(6)));
-        header.child(primaryActions().margins(Insets.top(8)));
-        header.child(secondaryActions().margins(Insets.top(6)));
-        header.child(filtersRow().margins(Insets.top(8)));
+        header.child(statsRow().margins(Insets.top(RuntimeUi.GAP_ITEM)));
+        header.child(primaryActions().margins(Insets.top(RuntimeUi.GAP_SECTION)));
+        header.child(secondaryActions().margins(Insets.top(RuntimeUi.GAP_ITEM)));
         return header;
     }
 
-    private FlowLayout summaryRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(statChip("Zones", value(snapshot == null ? 0 : snapshot.totalZones)));
-        row.child(statChip("Enabled", value(snapshot == null ? 0 : snapshot.enabledZones)).margins(Insets.left(6)));
-        row.child(statChip("Active", value(snapshot == null ? 0 : snapshot.activeZones)).margins(Insets.left(6)));
-        row.child(statChip("Primary", value(snapshot == null ? 0 : snapshot.managedPrimaryCount)).margins(Insets.left(6)));
-        row.child(statChip("Companions", value(snapshot == null ? 0 : snapshot.managedCompanionCount)).margins(Insets.left(6)));
-        row.child(statChip("Events", value(snapshot == null ? 0 : snapshot.recentEventsCount)).margins(Insets.left(6)));
-        row.child(statChip("Debug", snapshot != null && snapshot.debug ? "ON" : "OFF").margins(Insets.left(6)));
+    private String summaryText() {
+        if (snapshot == null) return "";
+        return snapshot.activeZones + "/" + snapshot.totalZones + " active";
+    }
+
+    private FlowLayout statsRow() {
+        FlowLayout row = RuntimeUi.row();
+        row.child(RuntimeUi.chip("Zones", str(snapshot.totalZones), RuntimeUi.COLOR_TEXT));
+        row.child(RuntimeUi.chip("Enabled", str(snapshot.enabledZones), RuntimeUi.COLOR_OK_LIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.chip("Active", str(snapshot.activeZones), RuntimeUi.COLOR_OK).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.chip("Primary", str(snapshot.managedPrimaryCount), RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.chip("Companions", str(snapshot.managedCompanionCount), RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.chip("Events", str(snapshot.recentEventsCount), RuntimeUi.COLOR_ZONE_TAG).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.chip("Debug", snapshot.debug ? "ON" : "OFF", snapshot.debug ? RuntimeUi.COLOR_HIGHLIGHT : RuntimeUi.COLOR_MUTED).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         return row;
     }
 
     private FlowLayout primaryActions() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(actionButton("Refresh", this::requestSnapshot));
-        row.child(actionButton("Reload Zones", () -> openConfirm("Reload Zones", "Re-read zone JSON files. Runtime state stays intact.", "RELOAD")).margins(Insets.left(6)));
-        row.child(actionButton("Cleanup Orphans", () -> openConfirm("Cleanup Orphans", "Remove orphan managed mobs from loaded worlds.", "CLEANUP_ORPHANS")).margins(Insets.left(6)));
-        row.child(actionButton("State Save", () -> sendAction("STATE_SAVE", null)).margins(Insets.left(6)));
+        FlowLayout row = RuntimeUi.row();
+        row.child(RuntimeUi.button("Refresh", this::requestSnapshot));
+        row.child(RuntimeUi.button("Reload Zones", () -> openConfirm("Reload Zones", "Re-read zone JSON files. Runtime state stays intact.", "RELOAD")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.button("Cleanup Orphans", () -> openConfirm("Cleanup Orphans", "Remove orphan managed mobs from loaded worlds.", "CLEANUP_ORPHANS")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.button("State Save", () -> sendAction("STATE_SAVE")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         return row;
     }
 
     private FlowLayout secondaryActions() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(actionButton("Events", () -> {
+        FlowLayout row = RuntimeUi.row();
+        row.child(RuntimeUi.button("Events", () -> {
             if (snapshot != null) {
                 MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot));
             }
         }));
-        row.child(actionButton(snapshot != null && snapshot.debug ? "Debug Off" : "Debug On", () -> sendAction(snapshot != null && snapshot.debug ? "DEBUG_OFF" : "DEBUG_ON", null)).margins(Insets.left(6)));
+        row.child(RuntimeUi.button("Toggle Debug", () -> sendAction("TOGGLE_DEBUG")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.button("Reload Config", () -> openConfirm("Reload Config", "Re-read config files.", "RELOAD_CONFIG")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         return row;
-    }
-
-    private FlowLayout filtersRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.child(Components.label(Text.literal("Filter")).color(Color.ofRgb(0xAAB2C6)));
-        row.child(filterButton("ALL").margins(Insets.left(8)));
-        row.child(filterButton("ACTIVE").margins(Insets.left(4)));
-        row.child(filterButton("INACTIVE").margins(Insets.left(4)));
-        row.child(filterButton("ENABLED").margins(Insets.left(4)));
-        row.child(filterButton("DISABLED").margins(Insets.left(4)));
-        row.child(filterButton("ATTENTION").margins(Insets.left(4)));
-        return row;
-    }
-
-    private Component statChip(String title, String value) {
-        FlowLayout chip = Containers.verticalFlow(Sizing.content(), Sizing.content());
-        chip.surface(Surface.DARK_PANEL).padding(Insets.of(6));
-        chip.child(Components.label(Text.literal(title)).color(Color.ofRgb(0xAAB2C6)));
-        chip.child(Components.label(Text.literal(value)).color(Color.ofRgb(0xFFFFFF)));
-        return chip;
-    }
-
-    private Component actionButton(String title, Runnable action) {
-        return Components.button(Text.literal(title), button -> action.run()).sizing(Sizing.fixed(132), Sizing.content());
-    }
-
-    private Component filterButton(String mode) {
-        boolean selected = filterMode.equals(mode);
-        return Components.button(Text.literal(selected ? "[" + mode + "]" : mode), button -> {
-            filterMode = mode;
-            rebuildZonesList();
-        }).sizing(Sizing.fixed(mode.equals("ATTENTION") ? 108 : 96), Sizing.content());
-    }
-
-    private String summaryText() {
-        if (snapshot == null) {
-            return "Loading snapshot...";
-        }
-        return "loaded " + snapshot.totalZones + " zones, " + snapshot.activeZones + " active, " + snapshot.recentEventsCount + " recent events";
-    }
-
-    private boolean matchesFilter(ZoneSummaryDto zone) {
-        return switch (filterMode) {
-            case "ACTIVE" -> zone.active;
-            case "INACTIVE" -> !zone.active && zone.enabled;
-            case "ENABLED" -> zone.enabled;
-            case "DISABLED" -> !zone.enabled;
-            case "ATTENTION" -> zone.dirty || (zone.warningText != null && !zone.warningText.isBlank()) || (zone.hintText != null && !zone.hintText.isBlank());
-            default -> true;
-        };
     }
 
     private void rebuildZonesList() {
         zonesList.clearChildren();
-
-        if (snapshot == null) {
-            zonesList.child(Components.label(Text.literal("Loading snapshot...")).color(Color.ofRgb(0xAAB2C6)));
+        if (snapshot == null || snapshot.zones == null || snapshot.zones.isEmpty()) {
+            zonesList.child(RuntimeUi.muted("No zones loaded.").margins(Insets.top(RuntimeUi.GAP_ITEM)));
             return;
         }
-
-        if (snapshot.zones.isEmpty()) {
-            zonesList.child(Components.label(Text.literal("No zones loaded. Add JSON files to config/gerbarium/zones/")).color(Color.ofRgb(0xFFE08A)));
-            return;
-        }
-
-        int shown = 0;
         for (ZoneSummaryDto zone : snapshot.zones) {
-            if (!matchesFilter(zone)) {
-                continue;
-            }
-
-            zonesList.child(buildZoneCard(zone));
-            shown++;
-        }
-
-        if (shown == 0) {
-            zonesList.child(Components.label(Text.literal("No zones match the current filter.")).color(Color.ofRgb(0xFFE08A)));
+            zonesList.child(zoneCard(zone).margins(Insets.top(RuntimeUi.GAP_ITEM)));
         }
     }
 
-    private FlowLayout buildZoneCard(ZoneSummaryDto zone) {
-        FlowLayout card = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        card.surface(Surface.PANEL).padding(Insets.of(10)).margins(Insets.vertical(4));
+    private FlowLayout zoneCard(ZoneSummaryDto zone) {
+        FlowLayout card = RuntimeUi.card();
+        FlowLayout header = RuntimeUi.row();
+        header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        header.child(RuntimeUi.label(displayName(zone), RuntimeUi.COLOR_ACCENT));
+        header.child(zoneStatus(zone).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        header.child(zoneEnabled(zone).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        header.child(zoneActive(zone).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        card.child(header);
 
-        FlowLayout titleRow = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        titleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        titleRow.child(Components.label(Text.literal(displayName(zone))).sizing(Sizing.fixed(240)));
-        titleRow.child(statusLabel(zone).margins(Insets.left(6)));
-        titleRow.child(enabledLabel(zone).margins(Insets.left(6)));
-        titleRow.child(activeLabel(zone).margins(Insets.left(6)));
-        if (zone.dirty) {
-            titleRow.child(Components.label(Text.literal("DIRTY")).color(Color.ofRgb(0xFFB347)).margins(Insets.left(6)));
+        FlowLayout meta = RuntimeUi.row();
+        meta.child(RuntimeUi.label("Dim: " + RuntimeUi.valueOrDash(zone.dimension), RuntimeUi.COLOR_SUBTLE));
+        meta.child(RuntimeUi.label("Rules: " + zone.totalRules, RuntimeUi.COLOR_SUBTLE).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        meta.child(RuntimeUi.label("Primary: " + zone.primaryAliveTotal, RuntimeUi.COLOR_OK_LIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        meta.child(RuntimeUi.label("Companions: " + zone.companionsAliveTotal, RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        if (zone.nearbyPlayers > 0) {
+            meta.child(RuntimeUi.label("Players: " + zone.nearbyPlayers, RuntimeUi.COLOR_ZONE_TAG).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         }
-        card.child(titleRow);
-
-        FlowLayout meta = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        meta.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        meta.child(metaLabel("ID", zone.id));
-        meta.child(metaLabel("Dimension", zone.dimension).margins(Insets.left(12)));
-        meta.child(metaLabel("Players", String.valueOf(zone.nearbyPlayers)).margins(Insets.left(12)));
-        meta.child(metaLabel("Rules", String.valueOf(zone.totalRules)).margins(Insets.left(12)));
-        meta.child(metaLabel("Primary", String.valueOf(zone.primaryAliveTotal)).margins(Insets.left(12)));
-        meta.child(metaLabel("Companions", String.valueOf(zone.companionsAliveTotal)).margins(Insets.left(12)));
-        card.child(meta.margins(Insets.top(4)));
-
-        FlowLayout timing = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        timing.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        timing.child(metaLabel("Last activated", TimeUtil.formatRelative(zone.lastActivatedAt)));
-        timing.child(metaLabel("Last deactivated", TimeUtil.formatRelative(zone.lastDeactivatedAt)).margins(Insets.left(12)));
-        timing.child(metaLabel("Last player seen", TimeUtil.formatRelative(zone.lastPlayerSeenAt)).margins(Insets.left(12)));
-        card.child(timing.margins(Insets.top(4)));
-
-        if (zone.currentStatus != null && !zone.currentStatus.isBlank()) {
-            card.child(Components.label(Text.literal("Status: " + zone.currentStatus)).color(Color.ofRgb(0xE3E8F6)).margins(Insets.top(6)));
+        if (zone.activationId > 0) {
+            meta.child(RuntimeUi.muted("Act#" + zone.activationId + " " + TimeUtil.formatRelative(zone.lastActivatedAt)).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         }
+        card.child(meta.margins(Insets.top(RuntimeUi.GAP_TINY)));
+
         if (zone.warningText != null && !zone.warningText.isBlank()) {
-            card.child(Components.label(Text.literal("Warning: " + zone.warningText)).color(Color.ofRgb(0xFF8A80)).margins(Insets.top(2)));
+            card.child(RuntimeUi.warn(zone.warningText).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
         if (zone.hintText != null && !zone.hintText.isBlank()) {
-            card.child(Components.label(Text.literal("Hint: " + zone.hintText)).color(Color.ofRgb(0xAAB2C6)).margins(Insets.top(2)));
+            card.child(RuntimeUi.label("Hint: " + zone.hintText, RuntimeUi.COLOR_LABEL).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
         if (zone.nextActionText != null && !zone.nextActionText.isBlank()) {
-            card.child(Components.label(Text.literal("Next: " + zone.nextActionText)).color(Color.ofRgb(0xC7D2FE)).margins(Insets.top(2)));
+            card.child(RuntimeUi.label("Next: " + zone.nextActionText, RuntimeUi.COLOR_DIM).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
-
-        card.child(zoneActionRowOne(zone).margins(Insets.top(8)));
-        card.child(zoneActionRowTwo(zone).margins(Insets.top(4)));
+        card.child(zoneActions(zone).margins(Insets.top(RuntimeUi.GAP_ITEM)));
         return card;
     }
 
-    private FlowLayout zoneActionRowOne(ZoneSummaryDto zone) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(actionButton("Details", () -> MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot))));
-        row.child(actionButton("Events", () -> MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot, zone.id, null))).margins(Insets.left(6)));
-        row.child(actionButton("Force Activate", () -> openConfirm("Force Activate", "Force activate zone " + zone.id + "?", "FORCE_ACTIVATE:" + zone.id)).margins(Insets.left(6)));
-        row.child(actionButton("Force Deactivate", () -> openConfirm("Force Deactivate", "Force deactivate zone " + zone.id + "?", "FORCE_DEACTIVATE:" + zone.id)).margins(Insets.left(6)));
+    private FlowLayout zoneActions(ZoneSummaryDto zone) {
+        FlowLayout row = RuntimeUi.row();
+        row.child(RuntimeUi.button("Details", () -> MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot))));
+        row.child(RuntimeUi.button("Events", () -> MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot, zone.id, null))).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Activate", () -> openConfirm("Force Activate", "Force activate zone " + zone.id + "?", "FORCE_ACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Deactivate", () -> openConfirm("Force Deactivate", "Force deactivate zone " + zone.id + "?", "FORCE_DEACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Spawn", () -> openConfirm("Force Spawn", "Force spawn all rules in zone " + zone.id + "?", "FORCE_SPAWN:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Clear Mobs", () -> openConfirm("Clear Mobs", "Remove managed mobs in zone " + zone.id + "?", "CLEAR_ZONE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Clear State", () -> openConfirm("Clear State", "Delete runtime state for zone " + zone.id + "?", "CLEAR_ZONE_STATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
         return row;
     }
 
-    private FlowLayout zoneActionRowTwo(ZoneSummaryDto zone) {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        row.child(actionButton("Force Spawn", () -> openConfirm("Force Spawn", "Force spawn all rules in zone " + zone.id + "?", "FORCE_SPAWN:" + zone.id)));
-        row.child(actionButton("Clear Mobs", () -> openConfirm("Clear Mobs", "Remove managed mobs in zone " + zone.id + "?", "CLEAR_ZONE:" + zone.id)).margins(Insets.left(6)));
-        row.child(actionButton("Clear State", () -> openConfirm("Clear State", "Delete runtime state for zone " + zone.id + "?", "CLEAR_ZONE_STATE:" + zone.id)).margins(Insets.left(6)));
-        return row;
+    private Component zoneStatus(ZoneSummaryDto zone) {
+        String text = zone.currentStatus == null || zone.currentStatus.isBlank() ? fallbackStatus(zone) : zone.currentStatus;
+        return RuntimeUi.label(text, statusColor(zone));
     }
 
-    private Component statusLabel(ZoneSummaryDto zone) {
-        return Components.label(Text.literal(zone.currentStatus == null || zone.currentStatus.isBlank() ? fallbackZoneStatus(zone) : zone.currentStatus))
-                .color(Color.ofRgb(statusColor(zone)))
-                .sizing(Sizing.fixed(180), Sizing.content());
+    private Component zoneEnabled(ZoneSummaryDto zone) {
+        return RuntimeUi.label(zone.enabled ? "ENABLED" : "DISABLED", zone.enabled ? RuntimeUi.COLOR_OK_LIGHT : RuntimeUi.COLOR_WARN);
     }
 
-    private Component enabledLabel(ZoneSummaryDto zone) {
-        return Components.label(Text.literal(zone.enabled ? "ENABLED" : "DISABLED"))
-                .color(Color.ofRgb(zone.enabled ? 0xA7F3D0 : 0xFCA5A5))
-                .sizing(Sizing.fixed(88), Sizing.content());
+    private Component zoneActive(ZoneSummaryDto zone) {
+        return RuntimeUi.label(zone.active ? "ACTIVE" : "INACTIVE", zone.active ? RuntimeUi.COLOR_OK : RuntimeUi.COLOR_MUTED);
     }
 
-    private Component activeLabel(ZoneSummaryDto zone) {
-        return Components.label(Text.literal(zone.active ? "ACTIVE" : "INACTIVE"))
-                .color(Color.ofRgb(zone.active ? 0x86EFAC : 0xCBD5E1))
-                .sizing(Sizing.fixed(88), Sizing.content());
-    }
-
-    private Component metaLabel(String label, String value) {
-        return Components.label(Text.literal(label + ": " + valueOrDash(value))).color(Color.ofRgb(0xD1D5DB));
-    }
-
-    private String fallbackZoneStatus(ZoneSummaryDto zone) {
-        if (!zone.enabled) {
-            return "DISABLED";
-        }
+    private String fallbackStatus(ZoneSummaryDto zone) {
+        if (!zone.enabled) return "DISABLED";
         return zone.active ? "ACTIVE" : "INACTIVE";
     }
 
     private int statusColor(ZoneSummaryDto zone) {
-        if (!zone.enabled) {
-            return 0xFCA5A5;
-        }
-        if (zone.warningText != null && !zone.warningText.isBlank()) {
-            return 0xFCD34D;
-        }
-        return zone.active ? 0x86EFAC : 0xCBD5E1;
+        if (!zone.enabled) return RuntimeUi.COLOR_WARN;
+        if (zone.warningText != null && !zone.warningText.isBlank()) return RuntimeUi.COLOR_HIGHLIGHT;
+        return zone.active ? RuntimeUi.COLOR_OK : RuntimeUi.COLOR_SUBTLE;
     }
 
     private String displayName(ZoneSummaryDto zone) {
         return zone.name == null || zone.name.isBlank() ? zone.id : zone.name;
     }
 
-    private String value(int value) {
+    private String str(int value) {
         return String.valueOf(value);
-    }
-
-    private String valueOrDash(String value) {
-        return value == null || value.isBlank() ? "-" : value;
     }
 
     private void requestSnapshot() {
@@ -310,20 +202,13 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
     }
 
     private void openConfirm(String title, String description, String action) {
-        MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(
-                Text.literal(title),
-                Text.literal(description),
-                () -> sendAction(action, null)
-        ));
+        MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(this,
+                Text.literal(title), Text.literal(description), () -> sendAction(action)));
     }
 
-    private void sendAction(String action, String zoneId) {
+    private void sendAction(String action) {
         PacketByteBuf buf = PacketByteBufs.create();
         buf.writeString(action);
-        if (zoneId != null) {
-            buf.writeString(zoneId);
-        }
         ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
-        requestSnapshot();
     }
 }

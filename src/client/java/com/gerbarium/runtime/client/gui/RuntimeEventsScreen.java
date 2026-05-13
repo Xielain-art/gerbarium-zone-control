@@ -67,207 +67,149 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     @Override
-    protected void build(FlowLayout rootComponent) {
-        rootComponent.surface(Surface.VANILLA_TRANSLUCENT)
+    protected void build(FlowLayout root) {
+        root.surface(Surface.VANILLA_TRANSLUCENT)
                 .padding(Insets.of(18))
                 .alignment(HorizontalAlignment.CENTER, VerticalAlignment.TOP);
 
-        rootComponent.child(buildHeader());
+        root.child(buildHeader());
 
-        this.eventsList = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        rootComponent.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), eventsList).margins(Insets.top(10)));
+        this.eventsList = RuntimeUi.col();
+        root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), eventsList).margins(Insets.top(RuntimeUi.GAP_SECTION)));
 
         rebuildEventsList();
     }
 
     private FlowLayout buildHeader() {
-        FlowLayout header = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        header.surface(Surface.PANEL).padding(Insets.of(10));
+        FlowLayout header = RuntimeUi.card();
 
-        FlowLayout title = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        title.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        title.child(Components.label(Text.literal("Runtime Events")).sizing(Sizing.fixed(180)));
-        title.child(Components.label(Text.literal(summaryText())).color(Color.ofRgb(0xAAB2C6)));
-        header.child(title);
+        FlowLayout titleRow = RuntimeUi.row();
+        titleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        titleRow.child(RuntimeUi.title("Runtime Events"));
+        titleRow.child(RuntimeUi.muted(summaryText()).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        header.child(titleRow);
 
-        header.child(filtersRow().margins(Insets.top(6)));
-        header.child(pagingRow().margins(Insets.top(8)));
+        header.child(buildFilters().margins(Insets.top(RuntimeUi.GAP_ITEM)));
+        header.child(buildPaging().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         return header;
     }
 
-    private FlowLayout filtersRow() {
-        FlowLayout row = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        FlowLayout first = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        first.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        first.child(actionButton("Back", () -> this.client.setScreen(parent)));
-        first.child(actionButton("Refresh", this::requestSnapshot).margins(Insets.left(6)));
-        first.child(actionButton("Clear filters", this::clearFilters).margins(Insets.left(6)));
-        first.child(actionButton("Type: " + typeFilter, this::cycleTypeFilter).margins(Insets.left(6)));
-        first.child(actionButton("Zone: " + zoneLabel(), this::cycleZoneFilter).margins(Insets.left(6)));
-        row.child(first);
+    private FlowLayout buildFilters() {
+        FlowLayout col = RuntimeUi.col();
 
-        FlowLayout second = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        second.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        second.child(Components.label(Text.literal("Search")).color(Color.ofRgb(0xAAB2C6)));
-        this.searchBox = Components.textBox(Sizing.fixed(260), searchQuery);
+        FlowLayout btnRow = RuntimeUi.row();
+        btnRow.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
+        btnRow.child(RuntimeUi.button("Refresh", this::requestSnapshot).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btnRow.child(RuntimeUi.button("Clear filters", this::clearFilters).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btnRow.child(RuntimeUi.button("Type: " + typeFilter, this::cycleTypeFilter).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btnRow.child(RuntimeUi.button("Zone: " + zoneLabel(), this::cycleZoneFilter).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        col.child(btnRow);
+
+        FlowLayout searchRow = RuntimeUi.row();
+        searchRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        searchRow.child(RuntimeUi.label("Search:", RuntimeUi.COLOR_LABEL));
+        this.searchBox = Components.textBox(Sizing.fill(100), searchQuery);
         this.searchBox.onChanged().subscribe(value -> {
             this.searchQuery = value == null ? "" : value.trim();
             this.page = 0;
             rebuildEventsList();
         });
-        second.child(searchBox.sizing(Sizing.fixed(260), Sizing.content()).margins(Insets.left(8)));
-        if (fixedRuleId != null && !fixedRuleId.isBlank()) {
-            second.child(Components.label(Text.literal("Rule filter: " + fixedRuleId)).color(Color.ofRgb(0xC7D2FE)).margins(Insets.left(12)));
-        }
-        row.child(second.margins(Insets.top(8)));
-        return row;
+        searchRow.child(searchBox.margins(Insets.left(RuntimeUi.GAP_TINY)));
+        col.child(searchRow.margins(Insets.top(RuntimeUi.GAP_TINY)));
+
+        return col;
     }
 
-    private FlowLayout pagingRow() {
-        FlowLayout row = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
+    private FlowLayout buildPaging() {
+        FlowLayout row = RuntimeUi.row();
         row.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        row.child(Components.label(Text.literal(pageText())).color(Color.ofRgb(0xAAB2C6)));
-        row.child(actionButton("Prev", this::prevPage).margins(Insets.left(12)));
-        row.child(actionButton("Next", this::nextPage).margins(Insets.left(6)));
+        row.child(RuntimeUi.muted(pageText()));
+        row.child(RuntimeUi.button("<", this::prevPage).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.button(">", this::nextPage).margins(Insets.left(RuntimeUi.GAP_TINY)));
         return row;
     }
 
     private void rebuildEventsList() {
         eventsList.clearChildren();
+        List<RuntimeEventDto> events = filteredEvents();
+        int totalPages = totalPages(events.size());
 
-        List<RuntimeEventDto> filtered = filteredEvents();
-        if (filtered.isEmpty()) {
-            eventsList.child(Components.label(Text.literal("No events match the current filters.")).color(Color.ofRgb(0xFDE68A)));
-            return;
-        }
-
-        int totalPages = totalPages(filtered.size());
         if (page >= totalPages) {
             page = Math.max(0, totalPages - 1);
         }
 
-        int from = page * PAGE_SIZE;
-        int to = Math.min(filtered.size(), from + PAGE_SIZE);
-        List<RuntimeEventDto> pageEvents = filtered.subList(from, to);
+        int start = page * PAGE_SIZE;
+        int end = Math.min(start + PAGE_SIZE, events.size());
 
-        for (RuntimeEventDto event : pageEvents) {
-            eventsList.child(eventCard(event).margins(Insets.vertical(3)));
+        if (events.isEmpty()) {
+            eventsList.child(RuntimeUi.muted("No events match current filters.").margins(Insets.top(RuntimeUi.GAP_ITEM)));
+            return;
         }
 
-        if (totalPages > 1) {
-            eventsList.child(Components.label(Text.literal("Page " + (page + 1) + " of " + totalPages + " - showing " + pageEvents.size() + " of " + filtered.size() + " matched events")).color(Color.ofRgb(0xAAB2C6)).margins(Insets.top(8)));
-        } else {
-            eventsList.child(Components.label(Text.literal("Showing " + filtered.size() + " matched events")).color(Color.ofRgb(0xAAB2C6)).margins(Insets.top(8)));
+        for (int i = start; i < end; i++) {
+            eventsList.child(buildEventCard(events.get(i)).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
     }
 
     private List<RuntimeEventDto> filteredEvents() {
-        if (snapshot == null || snapshot.recentEvents == null) {
-            return List.of();
+        List<RuntimeEventDto> all = snapshot == null || snapshot.recentEvents == null ? List.of() : snapshot.recentEvents;
+        List<RuntimeEventDto> result = new ArrayList<>();
+        for (RuntimeEventDto event : all) {
+            if (!"ALL".equals(typeFilter) && (event.type == null || !event.type.toUpperCase(Locale.ROOT).contains(typeFilter))) {
+                continue;
+            }
+            if (!"ALL".equals(zoneFilter) && !zoneFilter.equals(event.zoneId)) {
+                continue;
+            }
+            if (fixedRuleId != null && !fixedRuleId.isBlank() && !fixedRuleId.equals(event.ruleId)) {
+                continue;
+            }
+            if (searchQuery != null && !searchQuery.isBlank()) {
+                String q = searchQuery.toLowerCase(Locale.ROOT);
+                String blob = ((event.message == null ? "" : event.message) + " " + (event.type == null ? "" : event.type) + " " + (event.entityType == null ? "" : event.entityType) + " " + (event.zoneId == null ? "" : event.zoneId) + " " + (event.ruleId == null ? "" : event.ruleId)).toLowerCase(Locale.ROOT);
+                if (!blob.contains(q)) {
+                    continue;
+                }
+            }
+            result.add(event);
         }
-
-        String query = searchQuery == null ? "" : searchQuery.toLowerCase(Locale.ROOT);
-        List<RuntimeEventDto> filtered = new ArrayList<>();
-        for (RuntimeEventDto event : snapshot.recentEvents) {
-            if (!matchesZone(event)) {
-                continue;
-            }
-            if (!matchesRule(event)) {
-                continue;
-            }
-            if (!matchesType(event)) {
-                continue;
-            }
-            if (!query.isBlank() && !matchesSearch(event, query)) {
-                continue;
-            }
-            filtered.add(event);
-        }
-        filtered.sort(Comparator.comparingLong((RuntimeEventDto event) -> event.time).reversed());
-        return filtered;
+        result.sort(Comparator.comparingLong((RuntimeEventDto e) -> e.time).reversed());
+        return result;
     }
 
-    private boolean matchesZone(RuntimeEventDto event) {
-        return zoneFilter == null || zoneFilter.isBlank() || "ALL".equals(zoneFilter) || zoneFilter.equals(event.zoneId);
-    }
+    private FlowLayout buildEventCard(RuntimeEventDto event) {
+        FlowLayout card = RuntimeUi.card();
 
-    private boolean matchesRule(RuntimeEventDto event) {
-        return fixedRuleId == null || fixedRuleId.isBlank() || fixedRuleId.equals(event.ruleId);
-    }
-
-    private boolean matchesType(RuntimeEventDto event) {
-        if ("ALL".equals(typeFilter)) {
-            return true;
-        }
-        return switch (typeFilter) {
-            case "ZONE" -> event.type.startsWith("ZONE_");
-            case "PACK" -> event.type.startsWith("PACK_");
-            case "UNIQUE" -> event.type.startsWith("UNIQUE_");
-            case "FORCE" -> event.type.startsWith("FORCE_");
-            case "BOUNDARY" -> event.type.startsWith("BOUNDARY_");
-            case "RULE" -> event.type.startsWith("RULE_");
-            case "STATE" -> event.type.startsWith("STATE_") || event.type.startsWith("COOLDOWN_");
-            case "SYSTEM" -> event.type.equals("RELOAD") || event.type.equals("ORPHANS_CLEANED");
-            default -> event.type.equals(typeFilter);
-        };
-    }
-
-    private boolean matchesSearch(RuntimeEventDto event, String query) {
-        return contains(TimeUtil.formatRelative(event.time), query)
-                || contains(event.zoneId, query)
-                || contains(event.ruleId, query)
-                || contains(event.type, query)
-                || contains(event.message, query);
-    }
-
-    private boolean contains(String value, String query) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
-    }
-
-    private FlowLayout eventCard(RuntimeEventDto event) {
-        FlowLayout card = Containers.verticalFlow(Sizing.fill(100), Sizing.content());
-        card.surface(Surface.PANEL).padding(Insets.of(8));
-
-        FlowLayout top = Containers.horizontalFlow(Sizing.fill(100), Sizing.content());
-        top.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        top.child(Components.label(Text.literal(TimeUtil.formatRelative(event.time))).color(Color.ofRgb(0xAAB2C6)).sizing(Sizing.fixed(160)));
-        top.child(Components.label(Text.literal(event.type)).color(Color.ofRgb(typeColor(event.type))).sizing(Sizing.fixed(170)));
-        top.child(Components.label(Text.literal(event.zoneId == null ? "-" : event.zoneId)).color(Color.ofRgb(0x7DD3FC)).sizing(Sizing.fixed(160)));
+        FlowLayout top = RuntimeUi.row();
+        top.child(RuntimeUi.label(TimeUtil.formatRelative(event.time), RuntimeUi.COLOR_SUBTLE));
+        top.child(RuntimeUi.label(RuntimeUi.valueOrDash(event.type), typeColor(event.type)).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        top.child(RuntimeUi.label(RuntimeUi.valueOrDash(event.zoneId), RuntimeUi.COLOR_ZONE_TAG).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         if (event.ruleId != null && !event.ruleId.isBlank()) {
-            top.child(Components.label(Text.literal(event.ruleId)).color(Color.ofRgb(0xC7D2FE)).sizing(Sizing.fixed(160)));
+            top.child(RuntimeUi.label(event.ruleId, RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         }
         card.child(top);
 
-        card.child(Components.label(Text.literal(event.message == null || event.message.isBlank() ? "-" : event.message)).color(Color.ofRgb(0xFFFFFF)).margins(Insets.top(4)));
+        card.child(RuntimeUi.text(RuntimeUi.valueOrDash(event.message)).margins(Insets.top(RuntimeUi.GAP_TINY)));
         if (event.entityType != null && !event.entityType.isBlank()) {
-            card.child(Components.label(Text.literal("Entity: " + event.entityType + (event.role == null || event.role.isBlank() ? "" : " / " + event.role) + (event.forced ? " / forced" : ""))).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
+            String detail = "Entity: " + event.entityType;
+            if (event.role != null && !event.role.isBlank()) detail += " / " + event.role;
+            if (event.forced) detail += " / forced";
+            card.child(RuntimeUi.dim(detail).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
         if (event.action != null && !event.action.isBlank()) {
-            card.child(Components.label(Text.literal("Action: " + event.action + " @ " + event.x + "," + event.y + "," + event.z)).color(Color.ofRgb(0xCBD5E1)).margins(Insets.top(2)));
+            card.child(RuntimeUi.dim("Action: " + event.action + " @ " + event.x + "," + event.y + "," + event.z).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
         return card;
     }
 
     private int typeColor(String type) {
-        if (type == null) {
-            return 0xFFFFFF;
-        }
-        if (type.contains("FAILED") || type.contains("ERROR")) {
-            return 0xFCA5A5;
-        }
-        if (type.contains("BOUNDARY")) {
-            return 0xFDE68A;
-        }
-        if (type.contains("SUCCESS")) {
-            return 0x86EFAC;
-        }
-        if (type.contains("CLEARED") || type.contains("DEACTIVATED")) {
-            return 0xFDE68A;
-        }
-        if (type.contains("ACTIVATED") || type.contains("SPAWN")) {
-            return 0xA7F3D0;
-        }
-        return 0xFFFFFF;
+        if (type == null) return RuntimeUi.COLOR_TEXT;
+        if (type.contains("FAILED") || type.contains("ERROR")) return RuntimeUi.COLOR_WARN;
+        if (type.contains("BOUNDARY")) return RuntimeUi.COLOR_HIGHLIGHT;
+        if (type.contains("SUCCESS")) return RuntimeUi.COLOR_OK;
+        if (type.contains("CLEARED") || type.contains("DEACTIVATED")) return RuntimeUi.COLOR_HIGHLIGHT;
+        if (type.contains("ACTIVATED") || type.contains("SPAWN")) return RuntimeUi.COLOR_OK_LIGHT;
+        return RuntimeUi.COLOR_TEXT;
     }
 
     private String summaryText() {
@@ -282,9 +224,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     private String pageText() {
         int count = filteredCount();
         int totalPages = totalPages(count);
-        if (count == 0) {
-            return "No events to show";
-        }
+        if (count == 0) return "No events to show";
         return "Page " + (page + 1) + " / " + totalPages;
     }
 
@@ -293,9 +233,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     private String zoneLabel() {
-        if (fixedZoneId != null && !fixedZoneId.isBlank()) {
-            return fixedZoneId;
-        }
+        if (fixedZoneId != null && !fixedZoneId.isBlank()) return fixedZoneId;
         return zoneFilter == null ? "ALL" : zoneFilter;
     }
 
@@ -307,14 +245,11 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     private void cycleZoneFilter() {
-        if (fixedZoneId != null && !fixedZoneId.isBlank()) {
-            return;
-        }
+        if (fixedZoneId != null && !fixedZoneId.isBlank()) return;
         if (snapshot == null || snapshot.zones == null || snapshot.zones.isEmpty()) {
             zoneFilter = "ALL";
             return;
         }
-
         if ("ALL".equals(zoneFilter)) {
             zoneFilter = snapshot.zones.get(0).id;
         } else {
@@ -333,9 +268,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
 
     private String nextValue(String[] values, String current) {
         for (int i = 0; i < values.length; i++) {
-            if (values[i].equals(current)) {
-                return values[(i + 1) % values.length];
-            }
+            if (values[i].equals(current)) return values[(i + 1) % values.length];
         }
         return values[0];
     }
@@ -364,10 +297,6 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
         int totalPages = totalPages(filteredCount());
         page = Math.min(totalPages - 1, page + 1);
         rebuildEventsList();
-    }
-
-    private Component actionButton(String title, Runnable action) {
-        return Components.button(Text.literal(title), button -> action.run()).sizing(Sizing.fixed(132), Sizing.content());
     }
 
     private void requestSnapshot() {

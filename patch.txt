@@ -1,0 +1,304 @@
+﻿*** Begin Patch
+*** Add File: src/client/java/com/gerbarium/runtime/client/gui/RuntimeRuleDetailsScreen.java
++package com.gerbarium.runtime.client.gui;
++
++import com.gerbarium.runtime.client.dto.RuleSummaryDto;
++import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
++import com.gerbarium.runtime.client.dto.ZoneSummaryDto;
++import com.gerbarium.runtime.network.GerbariumRuntimePackets;
++import com.gerbarium.runtime.util.TimeUtil;
++import io.wispforest.owo.ui.base.BaseOwoScreen;
++import io.wispforest.owo.ui.container.Containers;
++import io.wispforest.owo.ui.container.FlowLayout;
++import io.wispforest.owo.ui.core.*;
++import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
++import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
++import net.minecraft.client.MinecraftClient;
++import net.minecraft.client.gui.screen.Screen;
++import net.minecraft.text.Text;
++import org.jetbrains.annotations.NotNull;
++
++public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView {
++    private final Screen parent;
++    private final String zoneId;
++    private final String ruleId;
++    private RuleSummaryDto rule;
++    private RuntimeSnapshotDto snapshot;
++    private FlowLayout body;
++
++    public RuntimeRuleDetailsScreen(Screen parent, RuleSummaryDto rule) {
++        this.parent = parent;
++        this.zoneId = rule.zoneId;
++        this.ruleId = rule.id;
++        this.rule = rule;
++    }
++
++    @Override
++    public void updateSnapshot(RuntimeSnapshotDto snapshot) {
++        this.snapshot = snapshot;
++        this.rule = findRule(snapshot);
++        if (this.body != null) {
++            rebuildBody();
++        }
++    }
++
++    @Override
++    protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
++        return OwoUIAdapter.create(this, Containers::verticalFlow);
++    }
++
++    @Override
++    protected void build(FlowLayout root) {
++        root.surface(Surface.VANILLA_TRANSLUCENT)
++                .padding(Insets.of(18))
++                .alignment(HorizontalAlignment.CENTER, VerticalAlignment.TOP);
++
++        root.child(buildHeader());
++
++        this.body = RuntimeUi.col();
++        this.body.surface(Surface.PANEL).padding(Insets.of(RuntimeUi.PAD_CARD));
++        root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), body).margins(Insets.top(RuntimeUi.GAP_SECTION)));
++
++        rebuildBody();
++    }
++
++    private FlowLayout buildHeader() {
++        FlowLayout header = RuntimeUi.card();
++
++        FlowLayout titleRow = RuntimeUi.row();
++        titleRow.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
++        titleRow.child(RuntimeUi.title("Rule Details"));
++        titleRow.child(RuntimeUi.label(rule == null ? ruleId : displayName(rule) + " (" + ruleId + ")", RuntimeUi.COLOR_LABEL).margins(Insets.left(RuntimeUi.GAP_ITEM)));
++        header.child(titleRow);
++
++        header.child(RuntimeUi.dim("Snapshot-backed diagnostics for one mob rule.").margins(Insets.top(RuntimeUi.GAP_TINY)));
++        header.child(buildActions().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        return header;
++    }
++
++    private FlowLayout buildActions() {
++        FlowLayout col = RuntimeUi.col();
++
++        FlowLayout row1 = RuntimeUi.row();
++        row1.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
++        row1.child(RuntimeUi.button("Refresh", this::requestSnapshot).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        row1.child(RuntimeUi.button("Rule History", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, ruleId))).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        col.child(row1);
++
++        FlowLayout row2 = RuntimeUi.row();
++        row2.child(RuntimeUi.button("Force Spawn", () -> confirm("Force Spawn", "Force spawn rule " + ruleId + "?", "FORCE_RULE_SPAWN:" + zoneId + ":" + ruleId)));
++        row2.child(RuntimeUi.button("Force Primary", () -> confirm("Force Primary", "Spawn only the primary entity for rule " + ruleId + "?", "FORCE_RULE_PRIMARY:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        row2.child(RuntimeUi.button("Force Companions", () -> confirm("Force Companions", "Spawn companions for rule " + ruleId + "?", "FORCE_RULE_COMPANIONS:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        col.child(row2.margins(Insets.top(RuntimeUi.GAP_TINY)));
++
++        FlowLayout row3 = RuntimeUi.row();
++        row3.child(RuntimeUi.button("Reset Cooldown", () -> confirm("Reset Cooldown", "Reset cooldown state for rule " + ruleId + "?", "RESET_RULE_COOLDOWN:" + zoneId + ":" + ruleId)));
++        row3.child(RuntimeUi.button("Kill Managed", () -> confirm("Kill Managed", "Discard managed mobs for rule " + ruleId + "?", "KILL_MANAGED:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        row3.child(RuntimeUi.button("Clear Rule State", () -> confirm("Clear Rule State", "Remove runtime state for rule " + ruleId + "?", "CLEAR_RULE_STATE:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
++        col.child(row3.margins(Insets.top(RuntimeUi.GAP_TINY)));
++
++        return col;
++    }
++
++    private void rebuildBody() {
++        body.clearChildren();
++        if (rule == null) {
++            body.child(RuntimeUi.warn("Rule not present in the latest snapshot."));
++            return;
++        }
++
++        body.child(buildConfigSection());
++        body.child(buildBoundarySection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildCountersSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildAttemptSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildSuccessSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildStatusSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildOnActivationSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildTimedSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildUniqueSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++        body.child(buildCompanionSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
++    }
++
++    private FlowLayout buildConfigSection() {
++        FlowLayout sec = RuntimeUi.section("Config");
++        sec.child(RuntimeUi.kv("Zone", zoneId));
++        sec.child(RuntimeUi.kv("Rule", ruleId));
++        sec.child(RuntimeUi.kv("Name", displayName(rule)));
++        sec.child(RuntimeUi.kv("Entity", RuntimeUi.valueOrDash(rule.entity)));
++        sec.child(RuntimeUi.kv("Enabled", RuntimeUi.boolText(rule.enabled)));
++        sec.child(RuntimeUi.kv("Spawn type", RuntimeUi.valueOrDash(rule.spawnType)));
++        sec.child(RuntimeUi.kv("Refill mode", RuntimeUi.valueOrDash(rule.refillMode)));
++        sec.child(RuntimeUi.kv("Boundary mode", RuntimeUi.valueOrDash(rule.boundaryMode)));
++        sec.child(RuntimeUi.kv("Boundary max outside seconds", String.valueOf(rule.boundaryMaxOutsideSeconds)));
++        sec.child(RuntimeUi.kv("Boundary check interval ticks", String.valueOf(rule.boundaryCheckIntervalTicks)));
++        sec.child(RuntimeUi.kv("Boundary teleport back", RuntimeUi.boolText(rule.boundaryTeleportBack)));
++        sec.child(RuntimeUi.kv("Max alive", String.valueOf(rule.maxAlive)));
++        sec.child(RuntimeUi.kv("Spawn count", String.valueOf(rule.spawnCount)));
++        sec.child(RuntimeUi.kv("Respawn seconds", String.valueOf(rule.respawnSeconds)));
++        sec.child(RuntimeUi.kv("Chance", String.format("%.2f", rule.chance)));
++        sec.child(RuntimeUi.kv("Cooldown start", RuntimeUi.valueOrDash(rule.cooldownStart)));
++        sec.child(RuntimeUi.kv("Spawn when ready", RuntimeUi.boolText(rule.spawnWhenReady)));
++        sec.child(RuntimeUi.kv("Failed retry seconds", String.valueOf(rule.failedSpawnRetrySeconds)));
++        sec.child(RuntimeUi.kv("Despawn when inactive", RuntimeUi.boolText(rule.despawnWhenZoneInactive)));
++        sec.child(RuntimeUi.kv("Announce on spawn", RuntimeUi.boolText(rule.announceOnSpawn)));
++        sec.child(RuntimeUi.kv("Timed budget", rule.timedMaxSpawnsPerActivation == null ? "null" : String.valueOf(rule.timedMaxSpawnsPerActivation)));
++        return sec;
++    }
++
++    private FlowLayout buildBoundarySection() {
++        FlowLayout sec = RuntimeUi.section("Boundary Control");
++        sec.child(RuntimeUi.kv("Mode", RuntimeUi.valueOrDash(rule.boundaryMode)));
++        sec.child(RuntimeUi.kv("Status", RuntimeUi.valueOrDash(rule.boundaryStatus)));
++        sec.child(RuntimeUi.kv("Outside tracked", String.valueOf(rule.boundaryOutsideCount)));
++        sec.child(RuntimeUi.kv("Last boundary action", TimeUtil.formatRelative(rule.lastBoundaryActionAt)));
++        sec.child(RuntimeUi.kv("Last boundary action type", RuntimeUi.valueOrDash(rule.lastBoundaryActionType)));
++        sec.child(RuntimeUi.kv("Boundary hint", RuntimeUi.valueOrDash(rule.boundaryHint)));
++        sec.child(RuntimeUi.dim(boundaryExplanation()).margins(Insets.top(RuntimeUi.GAP_TINY)));
++        if (rule.boundaryHint != null && !rule.boundaryHint.isBlank()) {
++            sec.child(RuntimeUi.label(rule.boundaryHint, RuntimeUi.COLOR_HIGHLIGHT).margins(Insets.top(RuntimeUi.GAP_TINY)));
++        }
++        if ("REMOVE_OUTSIDE".equalsIgnoreCase(rule.boundaryMode)) {
++            sec.child(RuntimeUi.label("Removed mobs do not count as normal deaths.", RuntimeUi.COLOR_HIGHLIGHT).margins(Insets.top(RuntimeUi.GAP_TINY)));
++        }
++        return sec;
++    }
++
++    private FlowLayout buildCountersSection() {
++        FlowLayout sec = RuntimeUi.section("Counters");
++        sec.child(RuntimeUi.kv("Primary alive", String.valueOf(rule.aliveCount)));
++        sec.child(RuntimeUi.kv("Companions alive", String.valueOf(rule.encounterCompanionsAlive)));
++        sec.child(RuntimeUi.kv("Known alive", String.valueOf(rule.knownAlive)));
++        sec.child(RuntimeUi.kv("Total attempts", String.valueOf(rule.totalAttempts)));
++        sec.child(RuntimeUi.kv("Total successes", String.valueOf(rule.totalSuccesses)));
++        sec.child(RuntimeUi.kv("Total primary spawned", String.valueOf(rule.totalPrimarySpawned)));
++        sec.child(RuntimeUi.kv("Total companions spawned", String.valueOf(rule.totalCompanionsSpawned)));
++        return sec;
++    }
++
++    private FlowLayout buildAttemptSection() {
++        FlowLayout sec = RuntimeUi.section("Last Attempt");
++        sec.child(RuntimeUi.kv("Last attempted at", TimeUtil.formatRelative(rule.lastAttemptAt)));
++        sec.child(RuntimeUi.kv("Last attempt result", RuntimeUi.valueOrDash(rule.lastAttemptResult)));
++        sec.child(RuntimeUi.kv("Last attempt reason", RuntimeUi.valueOrDash(rule.lastAttemptReason)));
++        return sec;
++    }
++
++    private FlowLayout buildSuccessSection() {
++        FlowLayout sec = RuntimeUi.section("Last Success");
++        sec.child(RuntimeUi.kv("Last success at", TimeUtil.formatRelative(rule.lastSuccessAt)));
++        sec.child(RuntimeUi.kv("Last successful primary count", String.valueOf(rule.lastSuccessfulPrimaryCount)));
++        sec.child(RuntimeUi.kv("Last successful companion count", String.valueOf(rule.lastSuccessfulCompanionCount)));
++        return sec;
++    }
++
++    private FlowLayout buildStatusSection() {
++        FlowLayout sec = RuntimeUi.section("Current Status");
++        sec.child(RuntimeUi.kv("Current status", RuntimeUi.valueOrDash(rule.currentStatus)));
++        sec.child(RuntimeUi.kv("Next action", RuntimeUi.valueOrDash(rule.nextActionText)));
++        sec.child(RuntimeUi.kv("Hint", RuntimeUi.valueOrDash(rule.hintText)));
++        sec.child(RuntimeUi.kv("Warning", RuntimeUi.valueOrDash(rule.warningText)));
++        sec.child(RuntimeUi.kv("Boundary status", RuntimeUi.valueOrDash(rule.boundaryStatus)));
++        return sec;
++    }
++
++    private FlowLayout buildOnActivationSection() {
++        FlowLayout sec = RuntimeUi.section("PACK ON_ACTIVATION");
++        sec.child(RuntimeUi.kv("Last activation spawn", TimeUtil.formatRelative(rule.lastActivationSpawnAt)));
++        sec.child(RuntimeUi.kv("Last activation attempt id", String.valueOf(rule.lastOnActivationAttemptActivationId)));
++        sec.child(RuntimeUi.kv("Current activation id", String.valueOf(currentActivationId())));
++        sec.child(RuntimeUi.kv("Already attempted this activation", RuntimeUi.boolText(rule.lastOnActivationAttemptActivationId == currentActivationId())));
++        sec.child(RuntimeUi.kv("Next available", TimeUtil.formatRelative(rule.nextAvailableAt)));
++        return sec;
++    }
++
++    private FlowLayout buildTimedSection() {
++        FlowLayout sec = RuntimeUi.section("PACK TIMED");
++        sec.child(RuntimeUi.kv("Timed progress", TimeUtil.formatDuration(rule.timedProgressMillis)));
++        sec.child(RuntimeUi.kv("Next timed spawn", TimeUtil.formatDuration(rule.nextTimedSpawnInMillis)));
++        sec.child(RuntimeUi.kv("Spawned this activation", String.valueOf(rule.timedSpawnedThisActivation)));
++        sec.child(RuntimeUi.kv("Budget exhausted", RuntimeUi.boolText(rule.timedBudgetExhausted)));
++        sec.child(RuntimeUi.kv("Last budget reset", TimeUtil.formatRelative(rule.lastTimedBudgetResetAt)));
++        if (rule.timedMaxSpawnsPerActivation != null && rule.timedMaxSpawnsPerActivation == -1) {
++            sec.child(RuntimeUi.warn("Warning: unlimited timed budget can create farm risk.").margins(Insets.top(RuntimeUi.GAP_TINY)));
++        }
++        return sec;
++    }
++
++    private FlowLayout buildUniqueSection() {
++        FlowLayout sec = RuntimeUi.section("UNIQUE");
++        sec.child(RuntimeUi.kv("Encounter active", RuntimeUi.boolText(rule.encounterActive)));
++        sec.child(RuntimeUi.kv("Encounter started", TimeUtil.formatRelative(rule.encounterStartedAt)));
++        sec.child(RuntimeUi.kv("Encounter cleared", TimeUtil.formatRelative(rule.encounterClearedAt)));
++        sec.child(RuntimeUi.kv("Primary alive", String.valueOf(rule.encounterPrimaryAlive)));
++        sec.child(RuntimeUi.kv("Companions alive", String.valueOf(rule.encounterCompanionsAlive)));
++        sec.child(RuntimeUi.kv("Last spawned primary", String.valueOf(rule.lastEncounterPrimarySpawned)));
++        sec.child(RuntimeUi.kv("Last spawned companions", String.valueOf(rule.lastEncounterCompanionsSpawned)));
++        sec.child(RuntimeUi.kv("Next available", TimeUtil.formatRelative(rule.nextAvailableAt)));
++        sec.child(RuntimeUi.kv("Next attempt", TimeUtil.formatRelative(rule.nextAttemptAt)));
++        sec.child(RuntimeUi.kv("Last death", TimeUtil.formatRelative(rule.lastDeathAt)));
++        if (rule.encounterCompanionsAlive > 0 && rule.encounterPrimaryAlive == 0) {
++            sec.child(RuntimeUi.muted("Hint: waiting for companions to clear before cooldown starts.").margins(Insets.top(RuntimeUi.GAP_TINY)));
++        }
++        return sec;
++    }
++
++    private FlowLayout buildCompanionSection() {
++        FlowLayout sec = RuntimeUi.section("Companions");
++        sec.child(RuntimeUi.kv("Companion count", String.valueOf(rule.lastSuccessfulCompanionCount)));
++        sec.child(RuntimeUi.dim("Companions are tracked on the parent rule and spawn around the primary or encounter center.").margins(Insets.top(RuntimeUi.GAP_TINY)));
++        return sec;
++    }
++
++    private long currentActivationId() {
++        ZoneSummaryDto zone = snapshot == null ? null : findZone(snapshot);
++        return zone == null ? 0L : zone.activationId;
++    }
++
++    private String displayName(RuleSummaryDto rule) {
++        return rule.name == null || rule.name.isBlank() ? rule.id : rule.name;
++    }
++
++    private String boundaryExplanation() {
++        return switch (RuntimeUi.valueOrDash(rule.boundaryMode)) {
++            case "NONE" -> "Mobs may leave the zone.";
++            case "LEASH" -> "Mobs are returned after staying outside too long.";
++            case "TELEPORT_BACK" -> "Mobs are teleported back inside the zone.";
++            case "REMOVE_OUTSIDE" -> "Mobs are removed if they stay outside too long.";
++            default -> RuntimeUi.valueOrDash(rule.boundaryHint);
++        };
++    }
++
++    private RuleSummaryDto findRule(RuntimeSnapshotDto snapshot) {
++        if (snapshot == null || snapshot.zones == null) return null;
++        for (ZoneSummaryDto zone : snapshot.zones) {
++            if (!zoneId.equals(zone.id)) continue;
++            for (RuleSummaryDto candidate : zone.rules) {
++                if (ruleId.equals(candidate.id)) return candidate;
++            }
++        }
++        return null;
++    }
++
++    private ZoneSummaryDto findZone(RuntimeSnapshotDto snapshot) {
++        if (snapshot == null || snapshot.zones == null) return null;
++        for (ZoneSummaryDto candidate : snapshot.zones) {
++            if (zoneId.equals(candidate.id)) return candidate;
++        }
++        return null;
++    }
++
++    private void confirm(String title, String description, String action) {
++        MinecraftClient.getInstance().setScreen(new RuntimeConfirmActionScreen(this, Text.literal(title), Text.literal(description), () -> sendAction(action)));
++    }
++
++    private void sendAction(String action) {
++        var buf = PacketByteBufs.create();
++        buf.writeString(action);
++        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
++    }
++
++    private void requestSnapshot() {
++        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
++    }
++}
+*** End Patch
