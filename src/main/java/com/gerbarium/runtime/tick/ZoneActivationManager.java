@@ -1,6 +1,7 @@
 package com.gerbarium.runtime.tick;
 
 import com.gerbarium.runtime.model.Zone;
+import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.state.RuntimeEvent;
 import com.gerbarium.runtime.state.ZoneRuntimePersistentState;
 import com.gerbarium.runtime.state.ZoneRuntimeState;
@@ -98,7 +99,7 @@ public class ZoneActivationManager {
             return false;
         }
 
-        Box box = zone.getZoneBox();
+        Box box = zone.getExpandedBox(Math.max(0, RuntimeConfigStorage.getConfig().boundaryScanPadding));
         boolean anyDespawned = false;
         for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
             var infoOpt = com.gerbarium.runtime.tracking.MobTagger.getInfo(entity);
