@@ -1,14 +1,17 @@
 package com.gerbarium.runtime.tick;
 
+import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.CooldownStart;
 import com.gerbarium.runtime.model.RefillMode;
+import com.gerbarium.runtime.model.SpawnMode;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.spawn.EntitySpawnService;
 import com.gerbarium.runtime.spawn.SpawnContext;
 import com.gerbarium.runtime.spawn.SpawnPositionFinder;
+import com.gerbarium.runtime.spawn.SpawnPositionResult;
 import com.gerbarium.runtime.state.RuleRuntimeState;
 import com.gerbarium.runtime.state.ZoneRuntimePersistentState;
 import com.gerbarium.runtime.state.ZoneRuntimeState;
@@ -21,7 +24,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Random;
 
@@ -42,6 +47,7 @@ public class ZoneMobSpawner {
 
             ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
             if (!zState.active) {
+                debugSkip(zone.id, "-", "zone_inactive");
                 continue;
             }
 
@@ -49,6 +55,7 @@ public class ZoneMobSpawner {
 
             ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
             if (world == null) {
+                debugSkip(zone.id, "-", "dimension_not_found dimension=" + zone.dimension);
                 continue;
             }
 
@@ -63,8 +70,11 @@ public class ZoneMobSpawner {
                 }
 
                 if (!rule.enabled || !rule.spawnWhenReady) {
+                    debugSkip(zone.id, rule.id, "rule_disabled");
                     continue;
                 }
+
+                debugCheck(zone, rule);
 
                 int spawned = 0;
                 if (rule.spawnType == SpawnType.PACK) {
@@ -80,10 +90,14 @@ public class ZoneMobSpawner {
 
     private static int handlePackRule(ServerWorld world, Zone zone, MobRule rule, ZoneRuntimeState zState) {
         if (!zState.firstSpawnDelayPassed) {
+            debugSkip(zone.id, rule.id, "first_spawn_delay");
             return 0;
         }
 
-        if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null || RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (configStatus != null || entityStatus != null) {
+            debugSkip(zone.id, rule.id, configStatus != null ? configStatus : entityStatus);
             return 0;
         }
 
@@ -102,23 +116,29 @@ public class ZoneMobSpawner {
         CooldownStart cooldownStart = rule.cooldownStart == null ? CooldownStart.AFTER_ACTIVATION : rule.cooldownStart;
         boolean afterDeathCooldown = cooldownStart == CooldownStart.AFTER_DEATH;
         if (!afterDeathCooldown && state.lastOnActivationAttemptActivationId == zState.activationId) {
+            debugSkip(zone.id, rule.id, "activation_already_attempted");
             return 0;
         }
 
         long effectiveCooldown = Math.max(rule.respawnSeconds, zone.activation.reactivationCooldownSeconds) * 1000L;
         if (afterDeathCooldown) {
-            if (state.nextAvailableAt > now || state.nextAttemptAt > now) {
+            long remaining = cooldownRemainingMillis(state, now);
+            if (remaining > 0) {
+                debugSkip(zone.id, rule.id, cooldownMessage(remaining));
                 return 0;
             }
         } else {
             long lastRealAttempt = Math.max(state.lastActivationSpawnAt, state.lastAttemptAt);
-            if (lastRealAttempt > 0 && now - lastRealAttempt < effectiveCooldown) {
+            long remaining = lastRealAttempt > 0 ? effectiveCooldown - (now - lastRealAttempt) : 0;
+            if (remaining > 0) {
+                debugSkip(zone.id, rule.id, cooldownMessage(remaining));
                 return 0;
             }
         }
 
         int alive = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
         if (alive >= rule.maxAlive) {
+            debugSkip(zone.id, rule.id, "max_alive current=" + alive + " max=" + rule.maxAlive);
             return 0;
         }
 
@@ -136,15 +156,17 @@ public class ZoneMobSpawner {
             state.totalAttempts++;
             zoneState.totalSpawnAttempts++;
             RuntimeStateStorage.markDirty(zone.id);
+            debugSkip(zone.id, rule.id, "chance");
             return 0;
         }
 
         int toSpawn = Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
         if (toSpawn <= 0) {
+            debugSkip(zone.id, rule.id, "nothing_to_spawn");
             return 0;
         }
 
-        int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, toSpawn);
+        int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, effectiveBatchSize(rule, toSpawn));
         if (spawned > 0) {
             state.lastActivationSpawnAt = now;
             if (!afterDeathCooldown) {
@@ -179,6 +201,7 @@ public class ZoneMobSpawner {
             state.totalAttempts++;
             zoneState.totalSpawnAttempts++;
             state.nextAttemptAt = now + rule.failedSpawnRetrySeconds * 1000L;
+            debugSkip(zone.id, rule.id, state.lastPositionSearchReason + " attempts=" + state.lastPositionSearchAttempts);
         }
 
         RuntimeStateStorage.markDirty(zone.id);
@@ -202,20 +225,26 @@ public class ZoneMobSpawner {
             state.timedBudgetExhausted = true;
             state.nextTimedSpawnInMillis = 0;
             RuntimeStateStorage.markDirty(zone.id);
+            debugSkip(zone.id, rule.id, "timed_budget_exhausted");
             return 0;
         }
 
         boolean intervalReached = TimedSpawnLogic.tick(now, rule, state);
         if (!intervalReached) {
+            debugSkip(zone.id, rule.id, cooldownMessage(Math.max(1L, state.nextTimedSpawnInMillis)));
             return 0;
         }
 
         int alive = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
         if (alive >= rule.maxAlive) {
+            debugSkip(zone.id, rule.id, "max_alive current=" + alive + " max=" + rule.maxAlive);
             return 0;
         }
 
-        if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null || RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (configStatus != null || entityStatus != null) {
+            debugSkip(zone.id, rule.id, configStatus != null ? configStatus : entityStatus);
             return 0;
         }
 
@@ -224,10 +253,11 @@ public class ZoneMobSpawner {
             toSpawn = Math.min(toSpawn, budget - state.timedSpawnedThisActivation);
         }
         if (toSpawn <= 0) {
+            debugSkip(zone.id, rule.id, "nothing_to_spawn");
             return 0;
         }
 
-        int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, toSpawn);
+        int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, effectiveBatchSize(rule, toSpawn));
         if (spawned > 0) {
             state.lastAttemptAt = now;
             state.lastAttemptResult = "SUCCESS";
@@ -258,10 +288,14 @@ public class ZoneMobSpawner {
 
     private static int handleUniqueRule(ServerWorld world, Zone zone, MobRule rule, ZoneRuntimeState zState) {
         if (!zState.firstSpawnDelayPassed) {
+            debugSkip(zone.id, rule.id, "first_spawn_delay");
             return 0;
         }
 
-        if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null || RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (configStatus != null || entityStatus != null) {
+            debugSkip(zone.id, rule.id, configStatus != null ? configStatus : entityStatus);
             return 0;
         }
 
@@ -270,15 +304,19 @@ public class ZoneMobSpawner {
         long now = System.currentTimeMillis();
 
         if (state.encounterActive) {
+            debugSkip(zone.id, rule.id, "encounter_active");
             return 0;
         }
 
-        if (state.nextAttemptAt > now || state.nextAvailableAt > now) {
+        long remaining = cooldownRemainingMillis(state, now);
+        if (remaining > 0) {
+            debugSkip(zone.id, rule.id, cooldownMessage(remaining));
             return 0;
         }
 
         int alive = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
         if (alive >= 1) {
+            debugSkip(zone.id, rule.id, "max_alive current=" + alive + " max=1");
             return 0;
         }
 
@@ -295,10 +333,12 @@ public class ZoneMobSpawner {
             state.totalAttempts++;
             zoneState.totalSpawnAttempts++;
             RuntimeStateStorage.markDirty(zone.id);
+            debugSkip(zone.id, rule.id, "chance");
             return 0;
         }
 
-        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
+        SpawnPositionResult positionResult = SpawnPositionFinder.findSpawnPositionResult(world, zone, rule, zState.nearbyPlayers, normalPositionAttempts(zone, rule));
+        Optional<BlockPos> pos = positionResult.position();
         state.totalAttempts++;
         zoneState.totalSpawnAttempts++;
 
@@ -306,10 +346,13 @@ public class ZoneMobSpawner {
             state.lastAttemptAt = now;
             state.nextAttemptAt = now + rule.failedSpawnRetrySeconds * 1000L;
             state.lastAttemptResult = "FAILED_NO_POSITION";
-            state.lastAttemptReason = "Could not find valid spawn position";
+            state.lastAttemptReason = positionResult.reason();
+            recordPositionResult(state, positionResult);
             RuntimeStateStorage.markDirty(zone.id);
+            debugPositionFailure(zone, rule, positionResult);
             return 0;
         }
+        recordPositionResult(state, positionResult);
 
         var primaryEntity = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.NORMAL);
         if (primaryEntity == null) {
@@ -318,6 +361,7 @@ public class ZoneMobSpawner {
             state.lastAttemptResult = "FAILED_SPAWN_REJECTED";
             state.lastAttemptReason = "Spawn rejected";
             RuntimeStateStorage.markDirty(zone.id);
+            debugSkip(zone.id, rule.id, "spawn_rejected");
             return 0;
         }
 
@@ -349,21 +393,27 @@ public class ZoneMobSpawner {
         if (companionsSpawned > 0) {
             RuntimeStateStorage.addEvent(zone.id, rule.id, "COMPANIONS_SPAWNED", "Spawned " + companionsSpawned + " companions");
         }
+        debugSuccess(zone.id, rule.id, rule.entity, pos.get(), 1);
         return 1;
     }
 
     private static int spawnPackPrimaryAndCompanions(ServerWorld world, Zone zone, MobRule rule, ZoneRuntimeState zState, RuleRuntimeState state, long now, SpawnContext context, int spawnAttempts) {
         int spawned = 0;
         int companionsSpawned = 0;
+        List<BlockPos> selectedPositions = new ArrayList<>();
 
         for (int i = 0; i < spawnAttempts; i++) {
-            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
+            SpawnPositionResult positionResult = SpawnPositionFinder.findSpawnPositionResult(world, zone, rule, zState.nearbyPlayers, normalPositionAttempts(zone, rule), selectedPositions);
+            Optional<BlockPos> pos = positionResult.position();
             if (pos.isEmpty()) {
                 state.lastAttemptAt = now;
                 state.lastAttemptResult = "FAILED_NO_POSITION";
-                state.lastAttemptReason = "Could not find valid spawn position";
+                state.lastAttemptReason = positionResult.reason();
+                recordPositionResult(state, positionResult);
+                debugPositionFailure(zone, rule, positionResult);
                 break;
             }
+            recordPositionResult(state, positionResult);
 
             var primaryEntity = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), context);
             if (primaryEntity == null) {
@@ -374,6 +424,8 @@ public class ZoneMobSpawner {
             }
 
             spawned++;
+            selectedPositions.add(pos.get());
+            debugSuccess(zone.id, rule.id, rule.entity, pos.get(), 1);
             companionsSpawned += EntitySpawnService.spawnCompanions(world, zone, rule, primaryEntity, context);
         }
 
@@ -385,5 +437,59 @@ public class ZoneMobSpawner {
         state.lastSuccessfulCompanionCount = companionsSpawned;
 
         return spawned;
+    }
+
+    private static void debugCheck(Zone zone, MobRule rule) {
+        if (!RuntimeConfigStorage.getConfig().debug) {
+            return;
+        }
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Spawn check: zone={} rule={} entity={}", zone.id, rule.id, rule.entity);
+    }
+
+    private static void debugSkip(String zoneId, String ruleId, String reason) {
+        if (!RuntimeConfigStorage.getConfig().debug) {
+            return;
+        }
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Spawn skipped: zone={} rule={} reason={}", zoneId, ruleId, reason);
+    }
+
+    private static void debugSuccess(String zoneId, String ruleId, String entity, BlockPos pos, int count) {
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Spawn success: zone={} rule={} entity={} pos={},{},{} count={}",
+                zoneId, ruleId, entity, pos.getX(), pos.getY(), pos.getZ(), count);
+    }
+
+    private static long cooldownRemainingMillis(RuleRuntimeState state, long now) {
+        long next = Math.max(state.nextAvailableAt, state.nextAttemptAt);
+        return Math.max(0, next - now);
+    }
+
+    private static String cooldownMessage(long remainingMillis) {
+        long remainingTicks = Math.max(1L, (remainingMillis + 49L) / 50L);
+        double remainingSeconds = remainingMillis / 1000.0D;
+        return "cooldown remainingTicks=" + remainingTicks + " remainingSeconds=" + String.format(Locale.ROOT, "%.2f", remainingSeconds);
+    }
+
+    private static int normalPositionAttempts(Zone zone, MobRule rule) {
+        int ruleAttempts = rule == null ? 128 : rule.positionAttempts;
+        return Math.max(128, Math.max(ruleAttempts, Math.max(RuntimeConfigStorage.getConfig().spawnPositionAttempts, zone.spawn.maxPositionAttempts)));
+    }
+
+    private static int effectiveBatchSize(MobRule rule, int requested) {
+        SpawnMode mode = rule == null || rule.spawnMode == null ? SpawnMode.RANDOM_VALID_POSITION : rule.spawnMode;
+        if (mode == SpawnMode.BOSS_ROOM) {
+            return Math.min(requested, 1);
+        }
+        return requested;
+    }
+
+    private static void recordPositionResult(RuleRuntimeState state, SpawnPositionResult result) {
+        state.lastPositionSearchAttempts = result.attempts();
+        state.lastPositionSearchReason = result.reason();
+        state.lastPositionSearchStats = result.stats().format();
+    }
+
+    private static void debugPositionFailure(Zone zone, MobRule rule, SpawnPositionResult result) {
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Spawn position search failed: zone={} rule={} entity={} {}",
+                zone.id, rule.id, rule.entity, result.failureSummary());
     }
 }

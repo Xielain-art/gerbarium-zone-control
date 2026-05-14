@@ -194,6 +194,7 @@ public class MobTracker {
         Box box = getManagedMobScanBox(zone);
 
         for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
+            if (isGone(entity)) continue;
             Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
             if (info.isPresent() && info.get().zoneId.equals(zone.id)) {
                 if ("PRIMARY".equals(info.get().role)) incrementPrimary(zone.id, info.get().ruleId, info.get().forced);
@@ -226,6 +227,7 @@ public class MobTracker {
             Box box = getManagedMobScanBox(zone);
 
             for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
+                if (isGone(entity)) continue;
                 Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
                 if (info.isPresent() && info.get().zoneId.equals(zone.id)) {
                     String key = zone.id + ":" + info.get().ruleId;
@@ -264,5 +266,9 @@ public class MobTracker {
     private static Box getManagedMobScanBox(Zone zone) {
         int padding = Math.max(0, RuntimeConfigStorage.getConfig().boundaryScanPadding);
         return zone.getExpandedBox(padding);
+    }
+
+    private static boolean isGone(net.minecraft.entity.Entity entity) {
+        return entity == null || entity.isRemoved() || (entity instanceof LivingEntity living && !living.isAlive());
     }
 }

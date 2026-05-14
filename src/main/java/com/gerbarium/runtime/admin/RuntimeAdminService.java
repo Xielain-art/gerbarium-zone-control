@@ -3,11 +3,13 @@ package com.gerbarium.runtime.admin;
 import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.model.MobRule;
+import com.gerbarium.runtime.model.SpawnMode;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.spawn.EntitySpawnService;
 import com.gerbarium.runtime.spawn.SpawnContext;
 import com.gerbarium.runtime.spawn.SpawnPositionFinder;
+import com.gerbarium.runtime.spawn.SpawnPositionResult;
 import com.gerbarium.runtime.state.RuleRuntimeState;
 import com.gerbarium.runtime.state.RuntimeEvent;
 import com.gerbarium.runtime.state.ZoneRuntimePersistentState;
@@ -27,7 +29,9 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public class RuntimeAdminService {
@@ -133,34 +137,29 @@ public class RuntimeAdminService {
         if (zoneOpt.isEmpty()) return new ActionResultDto(false, "Zone not found");
 
         Zone zone = zoneOpt.get();
-        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
-        if (world == null) return new ActionResultDto(false, "World unavailable");
+        if (!zone.enabled) return failed("disabled_zone", "Zone is disabled");
+        if (RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty()) return failed("dimension_not_found", "Dimension not found: " + zone.dimension);
 
-        ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         int totalPrimary = 0;
         int totalCompanions = 0;
+        int attempted = 0;
 
         for (MobRule rule : zone.mobs) {
             if (!rule.enabled) continue;
-
-            int toSpawn = rule.spawnType == SpawnType.UNIQUE ? 1 : Math.max(1, rule.spawnCount);
-
-            for (int i = 0; i < toSpawn; i++) {
-                Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
-                if (pos.isPresent()) {
-                    var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
-                    if (primary != null) {
-                        totalPrimary++;
-                        totalCompanions += EntitySpawnService.spawnCompanions(world, zone, rule, primary, SpawnContext.FORCED);
-                    }
-                }
-            }
+            attempted++;
+            ActionResultDto ruleResult = forceSpawnRule(zoneId, rule.id, server, adminName);
+            totalPrimary += ruleResult.primarySpawned;
+            totalCompanions += ruleResult.companionsSpawned;
         }
+
+        if (attempted == 0) return failed("no_enabled_rules", "No enabled mob rules in zone");
+        if (totalPrimary <= 0) return failed("no_mobs_spawned", "Force spawn completed, but no mobs spawned");
 
         ActionResultDto result = new ActionResultDto(true, "Force spawn completed");
         result.primarySpawned = totalPrimary;
         result.companionsSpawned = totalCompanions;
         RuntimeStateStorage.addEvent(zoneId, null, "FORCE_SPAWN", "Zone force spawn by " + adminName + ": " + totalPrimary + "P + " + totalCompanions + "C");
+        RuntimeStateStorage.markDirty(zoneId);
         return result;
     }
 
@@ -239,33 +238,104 @@ public class RuntimeAdminService {
         if (zoneOpt.isEmpty()) return new ActionResultDto(false, "Zone not found");
 
         Zone zone = zoneOpt.get();
+        if (!zone.enabled) return recordFailure(zoneId, ruleId, "disabled_zone", "Zone is disabled");
+
         Optional<MobRule> ruleOpt = zone.mobs.stream().filter(m -> m.id.equals(ruleId)).findFirst();
         if (ruleOpt.isEmpty()) return new ActionResultDto(false, "Rule not found");
 
         MobRule rule = ruleOpt.get();
+        rule.normalize();
+        if (!rule.enabled) return recordFailure(zoneId, ruleId, "disabled_rule", "Rule is disabled");
+
+        String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
+        if (configStatus != null) return recordFailure(zoneId, ruleId, configStatus, "Invalid rule config: " + configStatus);
+
+        String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
+        if (entityStatus != null) return recordFailure(zoneId, ruleId, entityStatus, "Invalid entity: " + rule.entity);
+
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
-        if (world == null) return new ActionResultDto(false, "World unavailable");
+        if (world == null) return recordFailure(zoneId, ruleId, "dimension_not_found", "Dimension not found: " + zone.dimension);
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
-        int toSpawn = rule.spawnType == SpawnType.UNIQUE ? 1 : Math.max(1, rule.spawnCount);
+        MobTracker.resyncZone(server, zone);
+        int alive = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
+        if (alive >= rule.maxAlive) {
+            return recordFailure(zoneId, ruleId, "max_alive", "Max alive reached: " + alive + "/" + rule.maxAlive);
+        }
+
+        SpawnMode spawnMode = rule.spawnMode == null ? SpawnMode.RANDOM_VALID_POSITION : rule.spawnMode;
+        int requested = rule.spawnType == SpawnType.UNIQUE || spawnMode == SpawnMode.BOSS_ROOM ? 1 : Math.max(1, rule.spawnCount);
+        int toSpawn = Math.min(requested, rule.maxAlive - alive);
+        if (toSpawn <= 0) return recordFailure(zoneId, ruleId, "max_alive", "Max alive reached");
 
         int totalPrimary = 0;
         int totalCompanions = 0;
+        long now = System.currentTimeMillis();
+        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
+        state.totalAttempts++;
+        state.lastAttemptAt = now;
+        int positionAttempts = Math.max(Math.max(512, RuntimeConfigStorage.getConfig().forceSpawnPositionAttempts), rule.positionAttempts);
+        SpawnPositionResult lastPositionResult = null;
+        List<BlockPos> selectedPositions = new ArrayList<>();
+
         for (int i = 0; i < toSpawn; i++) {
-            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
+            SpawnPositionResult positionResult = SpawnPositionFinder.findSpawnPositionResult(world, zone, rule, zState.nearbyPlayers, positionAttempts, selectedPositions);
+            lastPositionResult = positionResult;
+            recordPositionResult(state, positionResult);
+            Optional<BlockPos> pos = positionResult.position();
             if (pos.isPresent()) {
                 var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
                 if (primary != null) {
                     totalPrimary++;
+                    selectedPositions.add(pos.get());
                     totalCompanions += EntitySpawnService.spawnCompanions(world, zone, rule, primary, SpawnContext.FORCED);
+                    GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn success: zone={} rule={} entity={} pos={},{},{}", zone.id, rule.id, rule.entity, pos.get().getX(), pos.get().getY(), pos.get().getZ());
                 }
             }
         }
 
+        state.lastSuccessfulPrimaryCount = totalPrimary;
+        state.lastSuccessfulCompanionCount = totalCompanions;
+        state.knownAlive = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
+        if (totalPrimary <= 0) {
+            state.lastAttemptResult = "FAILED_NO_POSITION";
+            state.lastAttemptReason = lastPositionResult == null ? "no_valid_position" : lastPositionResult.reason();
+            RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_FAILED", state.lastAttemptReason + " by " + adminName);
+            RuntimeStateStorage.markDirty(zoneId);
+            String summary = lastPositionResult == null ? "reason=no_valid_position attempts=" + positionAttempts : lastPositionResult.failureSummary();
+            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn failed: zone={} rule={} entity={} {}", zone.id, rule.id, rule.entity, summary);
+            return failed(state.lastAttemptReason, "Force spawn failed: " + state.lastAttemptReason + " " + (lastPositionResult == null ? "" : lastPositionResult.stats().format()));
+        }
+
+        state.lastAttemptResult = "SUCCESS";
+        state.lastAttemptReason = "Force spawned " + totalPrimary + " primary mobs";
+        state.lastSuccessAt = now;
+        state.totalSuccesses++;
+        state.totalPrimarySpawned += totalPrimary;
+        state.totalCompanionsSpawned += totalCompanions;
         RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN", "Rule force spawn by " + adminName + ": " + totalPrimary + "P + " + totalCompanions + "C");
-        ActionResultDto result = new ActionResultDto(true, "Force spawn completed for rule " + ruleId);
+        RuntimeStateStorage.markDirty(zoneId);
+        ActionResultDto result = new ActionResultDto(true, "Force spawn success: zone=" + zoneId + " rule=" + ruleId + " entity=" + rule.entity);
         result.primarySpawned = totalPrimary;
         result.companionsSpawned = totalCompanions;
+        return result;
+    }
+
+    private static ActionResultDto recordFailure(String zoneId, String ruleId, String code, String message) {
+        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zoneId, ruleId);
+        state.lastAttemptAt = System.currentTimeMillis();
+        state.lastAttemptResult = "FAILED";
+        state.lastAttemptReason = code;
+        state.totalAttempts++;
+        RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_SKIPPED", message);
+        RuntimeStateStorage.markDirty(zoneId);
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Spawn skipped: zone={} rule={} reason={}", zoneId, ruleId, code);
+        return failed(code, message);
+    }
+
+    private static ActionResultDto failed(String code, String message) {
+        ActionResultDto result = new ActionResultDto(false, message);
+        result.errorCode = code;
         return result;
     }
 
@@ -282,8 +352,10 @@ public class RuntimeAdminService {
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
-        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
-        if (pos.isEmpty()) return new ActionResultDto(false, "No valid spawn position found");
+        SpawnPositionResult positionResult = SpawnPositionFinder.findSpawnPositionResult(world, zone, rule, zState.nearbyPlayers,
+                Math.max(Math.max(512, RuntimeConfigStorage.getConfig().forceSpawnPositionAttempts), rule.positionAttempts));
+        Optional<BlockPos> pos = positionResult.position();
+        if (pos.isEmpty()) return failed(positionResult.reason(), "No valid spawn position found: " + positionResult.failureSummary());
 
         var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
         if (primary != null) {
@@ -291,6 +363,12 @@ public class RuntimeAdminService {
             return new ActionResultDto(true, "Primary mob spawned for rule " + ruleId);
         }
         return new ActionResultDto(false, "Spawn rejected");
+    }
+
+    private static void recordPositionResult(RuleRuntimeState state, SpawnPositionResult result) {
+        state.lastPositionSearchAttempts = result.attempts();
+        state.lastPositionSearchReason = result.reason();
+        state.lastPositionSearchStats = result.stats().format();
     }
 
     public static ActionResultDto forceSpawnCompanions(String zoneId, String ruleId, MinecraftServer server, ServerPlayerEntity player, String adminName) {

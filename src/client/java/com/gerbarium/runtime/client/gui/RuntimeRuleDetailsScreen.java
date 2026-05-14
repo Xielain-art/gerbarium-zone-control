@@ -148,6 +148,14 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Failed retry seconds", String.valueOf(rule.failedSpawnRetrySeconds)));
         sec.child(RuntimeUi.kv("Despawn when inactive", RuntimeUi.boolText(rule.despawnWhenZoneInactive)));
         sec.child(RuntimeUi.kv("Announce on spawn", RuntimeUi.boolText(rule.announceOnSpawn)));
+        sec.child(RuntimeUi.kv("Spawn mode", RuntimeUi.valueOrDash(rule.spawnMode)));
+        sec.child(RuntimeUi.kv("Fixed X", rule.fixedX == null ? "-" : String.valueOf(rule.fixedX)));
+        sec.child(RuntimeUi.kv("Fixed Y", rule.fixedY == null ? "-" : String.valueOf(rule.fixedY)));
+        sec.child(RuntimeUi.kv("Fixed Z", rule.fixedZ == null ? "-" : String.valueOf(rule.fixedZ)));
+        sec.child(RuntimeUi.kv("Allow small room", RuntimeUi.boolText(rule.allowSmallRoom)));
+        sec.child(RuntimeUi.kv("Spread spawns", RuntimeUi.boolText(rule.spreadSpawns)));
+        sec.child(RuntimeUi.kv("Min spawn distance", String.valueOf(rule.minDistanceBetweenSpawns)));
+        sec.child(RuntimeUi.kv("Position attempts", String.valueOf(rule.positionAttempts)));
         sec.child(RuntimeUi.kv("Timed budget", rule.timedMaxSpawnsPerActivation == null ? "null" : String.valueOf(rule.timedMaxSpawnsPerActivation)));
         return sec;
     }

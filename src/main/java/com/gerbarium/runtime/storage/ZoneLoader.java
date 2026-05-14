@@ -63,7 +63,19 @@ public class ZoneLoader {
                 }
             }
             ZoneRepository.replaceAll(loadedZones);
-            GerbariumRegionsRuntime.LOGGER.info("Loaded " + loadedZones.size() + " zones.");
+            int activeZones = (int) loadedZones.stream()
+                    .filter(zone -> zone.enabled)
+                    .count();
+            int totalRules = loadedZones.stream()
+                    .mapToInt(zone -> zone.mobs == null ? 0 : zone.mobs.size())
+                    .sum();
+            int activeRules = loadedZones.stream()
+                    .mapToInt(zone -> zone.mobs == null ? 0 : (int) zone.mobs.stream()
+                            .filter(rule -> rule != null && rule.enabled && rule.spawnWhenReady)
+                            .count())
+                    .sum();
+            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Loaded zones: total={} active={}", loadedZones.size(), activeZones);
+            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Loaded mob rules: total={} active={}", totalRules, activeRules);
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to ensure zones directory exists", e);
         }

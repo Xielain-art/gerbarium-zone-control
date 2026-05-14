@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.tick;
 
+import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import com.gerbarium.runtime.config.RuntimeConfig;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
@@ -9,9 +10,19 @@ import net.minecraft.server.MinecraftServer;
 
 public class RuntimeTickHandler {
     private static long tickCounter = 0;
+    private static boolean registered = false;
 
     public static void register() {
+        if (registered) {
+            return;
+        }
         ServerTickEvents.END_SERVER_TICK.register(RuntimeTickHandler::onTick);
+        registered = true;
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Tick registered successfully");
+    }
+
+    public static boolean isRegistered() {
+        return registered;
     }
 
     private static void onTick(MinecraftServer server) {

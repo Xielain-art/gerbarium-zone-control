@@ -24,6 +24,14 @@ public class MobRule {
     public int failedSpawnRetrySeconds = 60;
     public boolean despawnWhenZoneInactive = false;
     public boolean announceOnSpawn = false;
+    public SpawnMode spawnMode = SpawnMode.RANDOM_VALID_POSITION;
+    public Integer fixedX;
+    public Integer fixedY;
+    public Integer fixedZ;
+    public boolean allowSmallRoom = true;
+    public int positionAttempts = 128;
+    public int minDistanceBetweenSpawns = 2;
+    public boolean spreadSpawns = true;
     public List<CompanionRule> companions = new ArrayList<>();
 
     public void normalize() {
@@ -39,6 +47,9 @@ public class MobRule {
         if (spawnType == null) {
             spawnType = SpawnType.PACK;
         }
+        if (spawnMode == null) {
+            spawnMode = SpawnMode.RANDOM_VALID_POSITION;
+        }
         if (boundaryMode == null || boundaryMode.isBlank()) {
             boundaryMode = BoundaryMode.LEASH.name();
         }
@@ -51,5 +62,10 @@ public class MobRule {
         respawnSeconds = Math.max(0, respawnSeconds);
         failedSpawnRetrySeconds = Math.max(1, failedSpawnRetrySeconds);
         boundaryMaxOutsideSeconds = Math.max(0, boundaryMaxOutsideSeconds);
+        positionAttempts = Math.max(1, positionAttempts);
+        minDistanceBetweenSpawns = Math.max(0, minDistanceBetweenSpawns);
+        if (spawnMode == SpawnMode.BOSS_ROOM) {
+            allowSmallRoom = true;
+        }
     }
 }

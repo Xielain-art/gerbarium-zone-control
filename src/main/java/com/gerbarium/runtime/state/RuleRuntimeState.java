@@ -18,6 +18,9 @@ public class RuleRuntimeState {
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
     public String lastAttemptReason = "";
+    public int lastPositionSearchAttempts;
+    public String lastPositionSearchReason = "";
+    public String lastPositionSearchStats = "";
 
     public long lastSuccessAt;
     public int lastSuccessfulPrimaryCount;

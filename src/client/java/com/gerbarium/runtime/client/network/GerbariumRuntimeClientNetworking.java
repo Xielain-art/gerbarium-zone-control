@@ -18,6 +18,7 @@ import net.minecraft.text.Text;
 
 public class GerbariumRuntimeClientNetworking {
     private static final Gson GSON = new Gson();
+    private static final int MAX_PACKET_STRING = 16000;
 
     public static void register() {
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.OPEN_RUNTIME_GUI, (client, handler, buf, responseSender) -> {
@@ -27,7 +28,7 @@ public class GerbariumRuntimeClientNetworking {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.SYNC_RUNTIME_SNAPSHOT, (client, handler, buf, responseSender) -> {
-            String json = buf.readString();
+            String json = buf.readString(MAX_PACKET_STRING);
             client.execute(() -> {
                 RuntimeSnapshotDto snapshot = GSON.fromJson(json, RuntimeSnapshotDto.class);
                 if (client.currentScreen instanceof RuntimeSnapshotView screen) {
@@ -37,7 +38,7 @@ public class GerbariumRuntimeClientNetworking {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.SYNC_ZONE_DETAILS, (client, handler, buf, responseSender) -> {
-            String json = buf.readString();
+            String json = buf.readString(MAX_PACKET_STRING);
             client.execute(() -> {
                 ZoneSummaryDto zone = GSON.fromJson(json, ZoneSummaryDto.class);
                 if (client.currentScreen instanceof RuntimeZoneDetailsView screen) {
@@ -47,7 +48,7 @@ public class GerbariumRuntimeClientNetworking {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.SYNC_RULE_DETAILS, (client, handler, buf, responseSender) -> {
-            String json = buf.readString();
+            String json = buf.readString(MAX_PACKET_STRING);
             client.execute(() -> {
                 RuleSummaryDto rule = GSON.fromJson(json, RuleSummaryDto.class);
                 if (client.currentScreen instanceof RuntimeRuleDetailsView screen) {
@@ -57,7 +58,7 @@ public class GerbariumRuntimeClientNetworking {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.SYNC_RUNTIME_EVENTS, (client, handler, buf, responseSender) -> {
-            String json = buf.readString();
+            String json = buf.readString(MAX_PACKET_STRING);
             client.execute(() -> {
                 RuntimeEventsDto events = GSON.fromJson(json, RuntimeEventsDto.class);
                 if (client.currentScreen instanceof RuntimeEventsView screen) {
@@ -67,7 +68,7 @@ public class GerbariumRuntimeClientNetworking {
         });
 
         ClientPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.ACTION_RESULT, (client, handler, buf, responseSender) -> {
-            String json = buf.readString();
+            String json = buf.readString(MAX_PACKET_STRING);
             client.execute(() -> {
                 ActionResultDto result = GSON.fromJson(json, ActionResultDto.class);
                 if (client.player != null) {

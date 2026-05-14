@@ -30,6 +30,14 @@ public class RuleSummaryDto {
     public int failedSpawnRetrySeconds;
     public boolean despawnWhenZoneInactive;
     public boolean announceOnSpawn;
+    public String spawnMode;
+    public Integer fixedX;
+    public Integer fixedY;
+    public Integer fixedZ;
+    public boolean allowSmallRoom;
+    public int positionAttempts;
+    public int minDistanceBetweenSpawns;
+    public boolean spreadSpawns;
     
     // Runtime State
     public int timedSpawnedThisActivation;
@@ -43,6 +51,7 @@ public class RuleSummaryDto {
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
     public String lastAttemptReason = "";
+    public String lastPositionSearchStats = "";
     public long lastSuccessAt;
     public int lastSuccessfulPrimaryCount;
     public int lastSuccessfulCompanionCount;

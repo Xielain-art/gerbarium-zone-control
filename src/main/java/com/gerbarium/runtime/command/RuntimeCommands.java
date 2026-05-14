@@ -299,6 +299,82 @@ public class RuntimeCommands {
                     )
                 )
             );
+
+            dispatcher.register(literal("gerb")
+                .requires(source -> PermissionUtil.hasAdminPermission(source))
+                .then(literal("runtime")
+                    .then(literal("gui")
+                        .executes(context -> {
+                            ServerCommandSource source = context.getSource();
+                            if (source.getEntity() instanceof ServerPlayerEntity player) {
+                                ServerPlayNetworking.send(player, GerbariumRuntimePackets.OPEN_RUNTIME_GUI, PacketByteBufs.create());
+                                return 1;
+                            }
+                            source.sendError(Text.literal("GUI is only available for players."));
+                            return 0;
+                        })
+                    )
+                    .then(literal("reload")
+                        .executes(context -> {
+                            RuntimeReloadApi.reload();
+                            context.getSource().sendFeedback(() -> Text.literal("Reloaded zones runtime and synchronized resources runtime."), true);
+                            return 1;
+                        })
+                    )
+                    .then(literal("debug")
+                        .executes(context -> {
+                            String status = RuntimeQueryService.getRuntimeStatusString();
+                            context.getSource().sendFeedback(() -> Text.literal(status), false);
+                            return 1;
+                        })
+                        .then(literal("on")
+                            .executes(context -> {
+                                RuntimeConfigStorage.getConfig().debug = true;
+                                RuntimeConfigStorage.save();
+                                context.getSource().sendFeedback(() -> Text.literal("Debug enabled."), true);
+                                return 1;
+                            })
+                        )
+                        .then(literal("off")
+                            .executes(context -> {
+                                RuntimeConfigStorage.getConfig().debug = false;
+                                RuntimeConfigStorage.save();
+                                context.getSource().sendFeedback(() -> Text.literal("Debug disabled."), true);
+                                return 1;
+                            })
+                        )
+                        .then(argument("zoneId", StringArgumentType.string())
+                            .then(argument("ruleId", StringArgumentType.string())
+                                .executes(context -> {
+                                    String zoneId = StringArgumentType.getString(context, "zoneId");
+                                    String ruleId = StringArgumentType.getString(context, "ruleId");
+                                    String status = RuntimeQueryService.getRuntimeDebugString(zoneId, ruleId, context.getSource().getServer());
+                                    context.getSource().sendFeedback(() -> Text.literal(status), false);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+                    .then(literal("force-spawn")
+                        .then(argument("zoneId", StringArgumentType.string())
+                            .then(argument("ruleId", StringArgumentType.string())
+                                .executes(context -> {
+                                    String zoneId = StringArgumentType.getString(context, "zoneId");
+                                    String ruleId = StringArgumentType.getString(context, "ruleId");
+                                    ActionResultDto result = RuntimeAdminService.forceSpawnRule(zoneId, ruleId, context.getSource().getServer(), context.getSource().getName());
+                                    Text message = Text.literal(result.message + ": Spawned " + result.primarySpawned + " primary, " + result.companionsSpawned + " companions");
+                                    if (result.success) {
+                                        context.getSource().sendFeedback(() -> message, true);
+                                        return 1;
+                                    }
+                                    context.getSource().sendError(message);
+                                    return 0;
+                                })
+                            )
+                        )
+                    )
+                )
+            );
         });
     }
 }

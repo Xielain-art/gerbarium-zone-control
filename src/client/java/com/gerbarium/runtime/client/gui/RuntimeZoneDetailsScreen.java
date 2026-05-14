@@ -220,10 +220,16 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     }
 
     private void sendAction(String action) {
-        String[] parts = action.split(":", 2);
+        String[] parts = action.split(":", 3);
         var buf = PacketByteBufs.create();
         buf.writeString(parts[0]);
-        buf.writeString(zoneId);
+        if (parts.length == 3) {
+            buf.writeString(parts[1]);
+            buf.writeString(parts[2]);
+            ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_RULE_ACTION, buf);
+            return;
+        }
+        buf.writeString(parts.length == 2 ? parts[1] : zoneId);
         ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_ZONE_ACTION, buf);
     }
 

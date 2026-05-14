@@ -12,6 +12,8 @@ public class RuntimeConfig {
     public int boundaryMaxEntitiesPerTick = 128;
     public int maxSpawnsPerTickCycle = 32;
     public int maxZonesProcessedPerSpawnTick = 20;
+    public int spawnPositionAttempts = 128;
+    public int forceSpawnPositionAttempts = 512;
     public boolean autoReloadZones = false;
     public int autoReloadCheckIntervalTicks = 200;
 }

@@ -14,6 +14,7 @@ import com.gerbarium.runtime.state.ZoneStateFile;
 import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
+import com.gerbarium.runtime.tick.RuntimeTickHandler;
 import com.gerbarium.runtime.tracking.MobTracker;
 import com.gerbarium.runtime.util.TimeUtil;
 import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
@@ -31,6 +32,7 @@ public class RuntimeQueryService {
         int enabledZones = (int) allZones.stream().filter(z -> z.enabled).count();
         int activeZones = 0;
         int totalRules = 0;
+        int activeRules = 0;
         int totalPrimaryAlive = 0;
         int totalCompanionsAlive = 0;
         int dirtyStates = 0;
@@ -40,6 +42,9 @@ public class RuntimeQueryService {
             if (zState.active) activeZones++;
             
             totalRules += zone.mobs.size();
+            activeRules += (int) zone.mobs.stream()
+                    .filter(rule -> rule != null && rule.enabled && rule.spawnWhenReady)
+                    .count();
             
             for (MobRule rule : zone.mobs) {
                 totalPrimaryAlive += MobTracker.getPrimaryAliveCount(zone.id, rule.id);
@@ -52,10 +57,22 @@ public class RuntimeQueryService {
         
         StringBuilder sb = new StringBuilder();
         sb.append("=== Gerbarium Zones Runtime Status ===\n");
+        sb.append("runtimeEnabled=true\n");
+        sb.append("zonesLoaded=").append(loadedZones).append("\n");
+        sb.append("activeZones=").append(activeZones).append("\n");
+        sb.append("mobRulesLoaded=").append(totalRules).append("\n");
+        sb.append("activeMobRules=").append(activeRules).append("\n");
+        sb.append("storagePath=").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getZonesDir()).append("\n");
+        sb.append("statePath=").append(com.gerbarium.runtime.storage.RuntimeStateStorage.getStorageRoot().resolve("states")).append("\n");
+        sb.append("tickRegistered=").append(RuntimeTickHandler.isRegistered()).append("\n");
+        sb.append("lastSpawnAttempt=").append(lastSpawnSummary("attempt")).append("\n");
+        sb.append("lastSpawnSuccess=").append(lastSpawnSummary("success")).append("\n");
+        sb.append("lastSpawnFailure=").append(lastSpawnSummary("failure")).append("\n");
         sb.append("Loaded zones: ").append(loadedZones).append("\n");
         sb.append("Enabled zones: ").append(enabledZones).append("\n");
         sb.append("Active zones: ").append(activeZones).append("\n");
         sb.append("Total rules: ").append(totalRules).append("\n");
+        sb.append("Active rules: ").append(activeRules).append("\n");
         sb.append("Managed primary alive: ").append(totalPrimaryAlive).append("\n");
         sb.append("Managed companions alive: ").append(totalCompanionsAlive).append("\n");
         sb.append("Dirty states: ").append(dirtyStates).append("\n");
@@ -354,6 +371,23 @@ public class RuntimeQueryService {
         int cAlive = MobTracker.getNormalCompanionAliveCount(zoneId, ruleId);
 
         StringBuilder sb = new StringBuilder();
+        sb.append("zone exists=true\n");
+        sb.append("zone enabled=").append(zone.enabled).append("\n");
+        sb.append("zone dimension=").append(zone.dimension).append("\n");
+        sb.append("zone min/max=").append(zone.getMinX()).append(",").append(zone.getMinY()).append(",").append(zone.getMinZ())
+                .append(" -> ").append(zone.getMaxX()).append(",").append(zone.getMaxY()).append(",").append(zone.getMaxZ()).append("\n");
+        sb.append("rule exists=true\n");
+        sb.append("rule enabled=").append(rule.enabled).append("\n");
+        sb.append("currentAlive=").append(pAlive).append("\n");
+        sb.append("retrySeconds=").append(rule.failedSpawnRetrySeconds).append("\n");
+        long now = System.currentTimeMillis();
+        long nextAllowed = Math.max(rs.nextAvailableAt, rs.nextAttemptAt);
+        long remainingTicks = Math.max(0L, (nextAllowed - now + 49L) / 50L);
+        sb.append("nextAllowedTick=").append(nextAllowed <= 0 ? 0 : nextAllowed / 50L).append("\n");
+        sb.append("remainingCooldownTicks=").append(remainingTicks).append("\n");
+        sb.append("lastFailureReason=").append(valueOrDash(rs.lastPositionSearchReason.isBlank() ? rs.lastAttemptReason : rs.lastPositionSearchReason)).append("\n");
+        sb.append("lastPositionSearchStats=").append(valueOrDash(rs.lastPositionSearchStats)).append("\n");
+        sb.append("\n");
         sb.append("Rule: ").append(ruleId).append("\n");
         sb.append("Name: ").append(rule.name).append("\n");
         sb.append("Entity: ").append(rule.entity).append("\n");
@@ -447,6 +481,10 @@ public class RuntimeQueryService {
         }
 
         return sb.toString();
+    }
+
+    public static String getRuntimeDebugString(String zoneId, String ruleId, MinecraftServer server) {
+        return getRuleStatusString(zoneId, ruleId, server);
     }
 
     public static String getEventsString(int limit) {
@@ -560,5 +598,34 @@ public class RuntimeQueryService {
 
     private static String valueOrDash(String value) {
         return (value == null || value.isBlank()) ? "-" : value;
+    }
+
+    private static String lastSpawnSummary(String mode) {
+        long bestTime = 0;
+        String best = "-";
+        for (Zone zone : ZoneRepository.getAll()) {
+            ZoneStateFile zf = RuntimeStateStorage.getZoneState(zone.id);
+            for (Map.Entry<String, RuleRuntimeState> entry : zf.rules.entrySet()) {
+                RuleRuntimeState state = entry.getValue();
+                long time;
+                if ("success".equals(mode)) {
+                    time = state.lastSuccessAt;
+                    if (time <= 0) continue;
+                } else if ("failure".equals(mode)) {
+                    time = state.lastAttemptAt;
+                    if (time <= 0 || "SUCCESS".equals(state.lastAttemptResult)) continue;
+                } else {
+                    time = state.lastAttemptAt;
+                    if (time <= 0) continue;
+                }
+                if (time >= bestTime) {
+                    bestTime = time;
+                    best = "zone=" + zone.id + " rule=" + entry.getKey() + " result=" + valueOrDash(state.lastAttemptResult)
+                            + " reason=" + valueOrDash(state.lastAttemptReason)
+                            + " positionReason=" + valueOrDash(state.lastPositionSearchReason);
+                }
+            }
+        }
+        return best;
     }
 }

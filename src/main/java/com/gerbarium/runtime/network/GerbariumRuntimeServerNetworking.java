@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.network;
 
+import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import com.gerbarium.runtime.admin.ActionResultDto;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
@@ -31,6 +32,7 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,6 +40,12 @@ import java.util.List;
 
 public class GerbariumRuntimeServerNetworking {
     private static final Gson GSON = new Gson();
+    private static final int MAX_DEBUG_ENTRIES = 20;
+    private static final int MAX_PACKET_STRING = 16000;
+    private static final int MAX_SNAPSHOT_ZONES = 100;
+    private static final int MAX_ZONE_RULES = 80;
+    private static final int MAX_TEXT_FIELD = 240;
+    private static final int MAX_CLIENT_STRING = 256;
 
     public static void register() {
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, (server, player, handler, buf, responseSender) -> {
@@ -45,15 +53,13 @@ public class GerbariumRuntimeServerNetworking {
 
             server.execute(() -> {
                 RuntimeSnapshotDto snapshot = createSnapshot(server);
-                PacketByteBuf responseBuf = PacketByteBufs.create();
-                responseBuf.writeString(GSON.toJson(snapshot));
-                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RUNTIME_SNAPSHOT, responseBuf);
+                sendJson(player, GerbariumRuntimePackets.SYNC_RUNTIME_SNAPSHOT, snapshot);
             });
         });
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_ZONE_DETAILS, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
-            String zoneId = buf.readString();
+            String zoneId = buf.readString(MAX_CLIENT_STRING);
 
             server.execute(() -> {
                 ZoneSummaryDto zone = findZone(createSnapshot(server), zoneId);
@@ -61,16 +67,14 @@ public class GerbariumRuntimeServerNetworking {
                     sendActionResult(player, new ActionResultDto(false, "Zone not found: " + zoneId));
                     return;
                 }
-                PacketByteBuf responseBuf = PacketByteBufs.create();
-                responseBuf.writeString(GSON.toJson(zone));
-                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_ZONE_DETAILS, responseBuf);
+                sendJson(player, GerbariumRuntimePackets.SYNC_ZONE_DETAILS, zone);
             });
         });
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_RULE_DETAILS, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
-            String zoneId = buf.readString();
-            String ruleId = buf.readString();
+            String zoneId = buf.readString(MAX_CLIENT_STRING);
+            String ruleId = buf.readString(MAX_CLIENT_STRING);
 
             server.execute(() -> {
                 ZoneSummaryDto zone = findZone(createSnapshot(server), zoneId);
@@ -79,33 +83,29 @@ public class GerbariumRuntimeServerNetworking {
                     sendActionResult(player, new ActionResultDto(false, "Rule not found: " + zoneId + ":" + ruleId));
                     return;
                 }
-                PacketByteBuf responseBuf = PacketByteBufs.create();
-                responseBuf.writeString(GSON.toJson(rule));
-                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RULE_DETAILS, responseBuf);
+                sendJson(player, GerbariumRuntimePackets.SYNC_RULE_DETAILS, rule);
             });
         });
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_RUNTIME_EVENTS, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
-            String zoneId = buf.readString();
-            String ruleId = buf.readString();
+            String zoneId = buf.readString(MAX_CLIENT_STRING);
+            String ruleId = buf.readString(MAX_CLIENT_STRING);
 
             server.execute(() -> {
                 RuntimeEventsDto events = createEvents(server, zoneId, ruleId);
-                PacketByteBuf responseBuf = PacketByteBufs.create();
-                responseBuf.writeString(GSON.toJson(events));
-                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RUNTIME_EVENTS, responseBuf);
+                sendJson(player, GerbariumRuntimePackets.SYNC_RUNTIME_EVENTS, events);
             });
         });
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
 
-            String action = buf.readString();
+            String action = buf.readString(MAX_CLIENT_STRING);
             String[] parts = action.split(":", 3);
             String actionCode = parts[0];
-            String param1 = parts.length > 1 ? parts[1] : (buf.isReadable() ? buf.readString() : null);
-            String param2 = parts.length > 2 ? parts[2] : (buf.isReadable() ? buf.readString() : null);
+            String param1 = parts.length > 1 ? parts[1] : (buf.isReadable() ? buf.readString(MAX_CLIENT_STRING) : null);
+            String param2 = parts.length > 2 ? parts[2] : (buf.isReadable() ? buf.readString(MAX_CLIENT_STRING) : null);
             
             server.execute(() -> {
                 ActionResultDto result;
@@ -152,8 +152,8 @@ public class GerbariumRuntimeServerNetworking {
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.RUN_ZONE_ACTION, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
-            String actionCode = buf.readString();
-            String zoneId = buf.readString();
+            String actionCode = buf.readString(MAX_CLIENT_STRING);
+            String zoneId = buf.readString(MAX_CLIENT_STRING);
 
             server.execute(() -> {
                 ActionResultDto result = runZoneAction(actionCode, zoneId, server, player);
@@ -163,9 +163,9 @@ public class GerbariumRuntimeServerNetworking {
 
         ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.RUN_RULE_ACTION, (server, player, handler, buf, responseSender) -> {
             if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
-            String actionCode = buf.readString();
-            String zoneId = buf.readString();
-            String ruleId = buf.readString();
+            String actionCode = buf.readString(MAX_CLIENT_STRING);
+            String zoneId = buf.readString(MAX_CLIENT_STRING);
+            String ruleId = buf.readString(MAX_CLIENT_STRING);
 
             server.execute(() -> {
                 ActionResultDto result = runRuleAction(actionCode, zoneId, ruleId, server, player);
@@ -175,9 +175,156 @@ public class GerbariumRuntimeServerNetworking {
     }
 
     private static void sendActionResult(ServerPlayerEntity player, ActionResultDto result) {
+        sendJson(player, GerbariumRuntimePackets.ACTION_RESULT, result);
+    }
+
+    private static void sendJson(ServerPlayerEntity player, Identifier packetId, Object payloadObject) {
+        String payload = boundedPayload(payloadObject);
         PacketByteBuf responseBuf = PacketByteBufs.create();
-        responseBuf.writeString(GSON.toJson(result));
-        ServerPlayNetworking.send(player, GerbariumRuntimePackets.ACTION_RESULT, responseBuf);
+        responseBuf.writeString(payload);
+        ServerPlayNetworking.send(player, packetId, responseBuf);
+    }
+
+    private static String boundedPayload(Object payloadObject) {
+        compactPayload(payloadObject);
+        String payload = GSON.toJson(payloadObject);
+        if (payload.length() <= MAX_PACKET_STRING) {
+            return payload;
+        }
+
+        if (payloadObject instanceof RuntimeSnapshotDto snapshot) {
+            snapshot.recentEvents.clear();
+            for (ZoneSummaryDto zone : snapshot.zones) {
+                compactZone(zone, 20);
+            }
+            if (snapshot.zones.size() > 25) {
+                snapshot.zones = new ArrayList<>(snapshot.zones.subList(0, 25));
+            }
+        } else if (payloadObject instanceof ZoneSummaryDto zone) {
+            compactZone(zone, 30);
+        } else if (payloadObject instanceof RuntimeEventsDto events) {
+            events.events.clear();
+        }
+
+        payload = GSON.toJson(payloadObject);
+        if (payload.length() <= MAX_PACKET_STRING) {
+            return payload;
+        }
+
+        GerbariumRegionsRuntime.LOGGER.warn("[GerbariumRuntime] Runtime packet payload still oversized after compaction: size={}", payload.length());
+        return GSON.toJson(minimalPayload(payloadObject));
+    }
+
+    private static void compactPayload(Object payloadObject) {
+        if (payloadObject instanceof RuntimeSnapshotDto snapshot) {
+            snapshot.recentEvents = limitEvents(snapshot.recentEvents);
+            if (snapshot.zones.size() > MAX_SNAPSHOT_ZONES) {
+                snapshot.zones = new ArrayList<>(snapshot.zones.subList(0, MAX_SNAPSHOT_ZONES));
+            }
+            for (ZoneSummaryDto zone : snapshot.zones) {
+                compactZone(zone, MAX_ZONE_RULES);
+            }
+            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Sending runtime summary: zones={} debugEntries={} payloadLimit={}",
+                    snapshot.zones.size(), snapshot.recentEvents.size(), MAX_PACKET_STRING);
+        } else if (payloadObject instanceof ZoneSummaryDto zone) {
+            compactZone(zone, MAX_ZONE_RULES);
+        } else if (payloadObject instanceof RuntimeEventsDto events) {
+            events.events = limitEvents(events.events);
+        }
+    }
+
+    private static Object minimalPayload(Object payloadObject) {
+        if (payloadObject instanceof RuntimeSnapshotDto snapshot) {
+            RuntimeSnapshotDto minimal = new RuntimeSnapshotDto();
+            minimal.debug = snapshot.debug;
+            minimal.boundaryControlEnabled = snapshot.boundaryControlEnabled;
+            minimal.totalZones = snapshot.totalZones;
+            minimal.enabledZones = snapshot.enabledZones;
+            minimal.activeZones = snapshot.activeZones;
+            minimal.managedPrimaryCount = snapshot.managedPrimaryCount;
+            minimal.managedCompanionCount = snapshot.managedCompanionCount;
+            minimal.recentEventsCount = snapshot.recentEventsCount;
+            return minimal;
+        }
+        if (payloadObject instanceof ZoneSummaryDto zone) {
+            ZoneSummaryDto minimal = new ZoneSummaryDto();
+            minimal.id = zone.id;
+            minimal.name = compactText(zone.name);
+            minimal.enabled = zone.enabled;
+            minimal.dimension = compactText(zone.dimension);
+            minimal.active = zone.active;
+            minimal.totalRules = zone.totalRules;
+            minimal.primaryAliveTotal = zone.primaryAliveTotal;
+            minimal.companionsAliveTotal = zone.companionsAliveTotal;
+            minimal.currentStatus = "TRUNCATED";
+            minimal.warningText = "Runtime details truncated to fit packet limit.";
+            return minimal;
+        }
+        if (payloadObject instanceof RuleSummaryDto rule) {
+            RuleSummaryDto minimal = new RuleSummaryDto();
+            minimal.id = rule.id;
+            minimal.zoneId = rule.zoneId;
+            minimal.name = compactText(rule.name);
+            minimal.entity = compactText(rule.entity);
+            minimal.enabled = rule.enabled;
+            minimal.aliveCount = rule.aliveCount;
+            minimal.maxAlive = rule.maxAlive;
+            minimal.currentStatus = "TRUNCATED";
+            minimal.warningText = "Rule details truncated to fit packet limit.";
+            return minimal;
+        }
+        if (payloadObject instanceof RuntimeEventsDto events) {
+            RuntimeEventsDto minimal = new RuntimeEventsDto();
+            minimal.zoneId = events.zoneId;
+            minimal.ruleId = events.ruleId;
+            return minimal;
+        }
+        ActionResultDto fallback = new ActionResultDto(false, "Runtime payload too large; narrow selection or reduce debug history.");
+        fallback.errorCode = "payload_too_large";
+        return fallback;
+    }
+
+    private static List<RuntimeEventDto> limitEvents(List<RuntimeEventDto> events) {
+        if (events == null || events.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<RuntimeEventDto> limited = new ArrayList<>(events.subList(0, Math.min(MAX_DEBUG_ENTRIES, events.size())));
+        for (RuntimeEventDto event : limited) {
+            event.message = compactText(event.message);
+            event.action = compactText(event.action);
+        }
+        return limited;
+    }
+
+    private static void compactZone(ZoneSummaryDto zone, int maxRules) {
+        zone.warningText = compactText(zone.warningText);
+        zone.hintText = compactText(zone.hintText);
+        zone.nextActionText = compactText(zone.nextActionText);
+        zone.statusText = compactText(zone.statusText);
+        zone.currentStatus = compactText(zone.currentStatus);
+        if (zone.rules != null && zone.rules.size() > maxRules) {
+            zone.rules = new ArrayList<>(zone.rules.subList(0, maxRules));
+        }
+        if (zone.rules != null) {
+            for (RuleSummaryDto rule : zone.rules) {
+                rule.warningText = compactText(rule.warningText);
+                rule.hintText = compactText(rule.hintText);
+                rule.nextActionText = compactText(rule.nextActionText);
+                rule.statusText = compactText(rule.statusText);
+                rule.currentStatus = compactText(rule.currentStatus);
+                rule.boundaryHint = compactText(rule.boundaryHint);
+                rule.boundaryStatus = compactText(rule.boundaryStatus);
+                rule.lastAttemptReason = compactText(rule.lastAttemptReason);
+                rule.lastPositionSearchStats = compactText(rule.lastPositionSearchStats);
+            }
+        }
+    }
+
+    private static String compactText(String text) {
+        if (text == null || text.length() <= MAX_TEXT_FIELD) {
+            return text;
+        }
+        return text.substring(0, MAX_TEXT_FIELD) + "...";
     }
 
     private static ActionResultDto runZoneAction(String actionCode, String zoneId, MinecraftServer server, ServerPlayerEntity player) {
@@ -335,6 +482,14 @@ public class GerbariumRuntimeServerNetworking {
                 rs.failedSpawnRetrySeconds = rule.failedSpawnRetrySeconds;
                 rs.despawnWhenZoneInactive = rule.despawnWhenZoneInactive;
                 rs.announceOnSpawn = rule.announceOnSpawn;
+                rs.spawnMode = rule.spawnMode == null ? "RANDOM_VALID_POSITION" : rule.spawnMode.name();
+                rs.fixedX = rule.fixedX;
+                rs.fixedY = rule.fixedY;
+                rs.fixedZ = rule.fixedZ;
+                rs.allowSmallRoom = rule.allowSmallRoom;
+                rs.positionAttempts = rule.positionAttempts;
+                rs.minDistanceBetweenSpawns = rule.minDistanceBetweenSpawns;
+                rs.spreadSpawns = rule.spreadSpawns;
 
                 RuleRuntimeState ruleState = zf.rules.get(rule.id);
                 if (ruleState != null) {
@@ -349,6 +504,7 @@ public class GerbariumRuntimeServerNetworking {
                     rs.lastAttemptAt = ruleState.lastAttemptAt;
                     rs.lastAttemptResult = ruleState.lastAttemptResult;
                     rs.lastAttemptReason = ruleState.lastAttemptReason;
+                    rs.lastPositionSearchStats = ruleState.lastPositionSearchStats;
                     rs.lastSuccessAt = ruleState.lastSuccessAt;
                     rs.lastSuccessfulPrimaryCount = ruleState.lastSuccessfulPrimaryCount;
                     rs.lastSuccessfulCompanionCount = ruleState.lastSuccessfulCompanionCount;

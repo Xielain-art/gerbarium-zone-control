@@ -25,6 +25,8 @@ public class MobTagger {
         nbt.putString(TAG_RULE_ID, ruleId);
         nbt.putString(TAG_MOB_ROLE, "PRIMARY");
         nbt.putBoolean(TAG_FORCED, forced);
+        entity.addCommandTag(zoneCommandTag(zoneId));
+        entity.addCommandTag(ruleCommandTag(ruleId));
     }
 
     public static void tagCompanion(Entity entity, String zoneId, String parentRuleId, String companionId, boolean forced) {
@@ -36,6 +38,8 @@ public class MobTagger {
         nbt.putBoolean(TAG_FORCED, forced);
         nbt.putString(TAG_PARENT_RULE_ID, parentRuleId);
         nbt.putString(TAG_COMPANION_ID, companionId);
+        entity.addCommandTag(zoneCommandTag(zoneId));
+        entity.addCommandTag(ruleCommandTag(parentRuleId));
     }
 
     public static Optional<ManagedMobInfo> getInfo(Entity entity) {
@@ -67,5 +71,27 @@ public class MobTagger {
 
     public static void setLastBoundaryActionAt(Entity entity, long time) {
         ((EntityPersistentDataHolder) entity).getPersistentData().putLong(TAG_LAST_BOUNDARY_ACTION_AT, time);
+    }
+
+    public static String zoneCommandTag(String zoneId) {
+        return "gerbarium_zone_" + sanitizeCommandTag(zoneId);
+    }
+
+    public static String ruleCommandTag(String ruleId) {
+        return "gerbarium_rule_" + sanitizeCommandTag(ruleId);
+    }
+
+    private static String sanitizeCommandTag(String value) {
+        if (value == null || value.isBlank()) return "unknown";
+        StringBuilder out = new StringBuilder(Math.min(value.length(), 64));
+        for (int i = 0; i < value.length() && out.length() < 64; i++) {
+            char c = value.charAt(i);
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == '+') {
+                out.append(c);
+            } else {
+                out.append('_');
+            }
+        }
+        return out.length() == 0 ? "unknown" : out.toString();
     }
 }
