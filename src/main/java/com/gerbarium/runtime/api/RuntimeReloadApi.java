@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.api;
 
+import com.gerbarium.runtime.GerbariumRegionsRuntime;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
 
 public final class RuntimeReloadApi {
@@ -7,6 +8,10 @@ public final class RuntimeReloadApi {
     }
 
     public static void reload() {
-        RuntimeAdminService.reload("bridge");
+        try {
+            RuntimeAdminService.reload("bridge");
+        } catch (Exception e) {
+            GerbariumRegionsRuntime.LOGGER.warn("Runtime reload API called before runtime fully ready or reload failed: {}", e.getMessage());
+        }
     }
 }
