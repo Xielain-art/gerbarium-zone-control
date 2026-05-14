@@ -11,18 +11,27 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class RuntimeRuleValidationUtilTest {
     @Test
-    void uniqueTimedIsAllowed() {
+    void uniqueTimedIsInvalid() {
         MobRule rule = new MobRule();
         rule.spawnType = SpawnType.UNIQUE;
         rule.refillMode = RefillMode.TIMED;
 
-        assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
+        assertEquals("FAILED_INVALID_RULE_CONFIG", RuntimeRuleValidationUtil.getConfigStatus(rule));
     }
 
     @Test
-    void packAfterDeathIsAllowed() {
+    void packAfterDeathIsInvalid() {
         MobRule rule = new MobRule();
         rule.spawnType = SpawnType.PACK;
+        rule.refillMode = RefillMode.AFTER_DEATH;
+
+        assertEquals("FAILED_INVALID_RULE_CONFIG", RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+
+    @Test
+    void uniqueAfterDeathConfigPasses() {
+        MobRule rule = new MobRule();
+        rule.spawnType = SpawnType.UNIQUE;
         rule.refillMode = RefillMode.AFTER_DEATH;
 
         assertNull(RuntimeRuleValidationUtil.getConfigStatus(rule));
