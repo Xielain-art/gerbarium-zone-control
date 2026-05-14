@@ -105,8 +105,7 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
                 MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot));
             }
         }));
-        row.child(RuntimeUi.button("Toggle Debug", () -> sendAction("TOGGLE_DEBUG")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
-        row.child(RuntimeUi.button("Reload Config", () -> openConfirm("Reload Config", "Re-read config files.", "RELOAD_CONFIG")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        row.child(RuntimeUi.button(snapshot != null && snapshot.debug ? "Debug Off" : "Debug On", () -> sendAction(snapshot != null && snapshot.debug ? "DEBUG_OFF" : "DEBUG_ON")).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         return row;
     }
 

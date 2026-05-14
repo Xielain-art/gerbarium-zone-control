@@ -1,5 +1,6 @@
 package com.gerbarium.runtime.tracking;
 import com.gerbarium.runtime.access.EntityPersistentDataHolder;
+import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.model.MobRule;
 import com.gerbarium.runtime.model.CooldownStart;
 import com.gerbarium.runtime.model.SpawnType;
@@ -54,8 +55,10 @@ public class MobTracker {
 
         if (!info.forced) {
             RuleRuntimeState state = RuntimeStateStorage.getRuleState(info.zoneId, info.ruleId);
-            state.lastDeathAt = now;
-            maybeStartCooldownOnDeath(info.zoneId, info.ruleId, now, state);
+            if (!isUniqueRule(info.zoneId, info.ruleId)) {
+                state.lastDeathAt = now;
+                maybeStartCooldownOnDeath(info.zoneId, info.ruleId, now, state);
+            }
             RuntimeStateStorage.markDirty(info.zoneId);
         }
 
@@ -101,10 +104,12 @@ public class MobTracker {
             CooldownStart cooldownStart = ruleOpt.get().cooldownStart == null ? CooldownStart.AFTER_ACTIVATION : ruleOpt.get().cooldownStart;
             if (cleanup) {
                 state.nextAttemptAt = state.encounterClearedAt + ruleOpt.get().failedSpawnRetrySeconds * 1000L;
+                state.nextAvailableAt = state.nextAttemptAt;
                 state.lastAttemptReason = "Unique encounter cleaned up, retry scheduled";
                 RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared (cleanup), retry in " + ruleOpt.get().failedSpawnRetrySeconds + "s");
             } else if (cooldownStart == CooldownStart.AFTER_DEATH) {
                 state.nextAttemptAt = state.encounterClearedAt + ruleOpt.get().respawnSeconds * 1000L;
+                state.nextAvailableAt = state.nextAttemptAt;
                 state.lastAttemptReason = "Unique encounter cleared, next in " + ruleOpt.get().respawnSeconds + "s";
                 RuntimeStateStorage.addEvent(zoneId, ruleId, "UNIQUE_ENCOUNTER_CLEARED", "Unique encounter cleared, next available in " + ruleOpt.get().respawnSeconds + "s");
             } else {
@@ -112,6 +117,12 @@ public class MobTracker {
             }
             RuntimeStateStorage.markDirty(zoneId);
         }
+    }
+
+    private static boolean isUniqueRule(String zoneId, String ruleId) {
+        Optional<Zone> zoneOpt = ZoneRepository.getById(zoneId);
+        if (zoneOpt.isEmpty()) return false;
+        return zoneOpt.get().mobs.stream().anyMatch(rule -> rule.id.equals(ruleId) && rule.spawnType == SpawnType.UNIQUE);
     }
 
     private static void maybeStartCooldownOnDeath(String zoneId, String ruleId, long now, RuleRuntimeState state) {
@@ -180,7 +191,7 @@ public class MobTracker {
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return;
 
-        Box box = zone.getZoneBox();
+        Box box = getManagedMobScanBox(zone);
 
         for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
             Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
@@ -212,7 +223,7 @@ public class MobTracker {
             ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
             if (world == null) continue;
 
-            Box box = zone.getZoneBox();
+            Box box = getManagedMobScanBox(zone);
 
             for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
                 Optional<ManagedMobInfo> info = MobTagger.getInfo(entity);
@@ -238,5 +249,20 @@ public class MobTracker {
         companionNormalCounts.putAll(newCompanionNormal);
         companionForcedCounts.clear();
         companionForcedCounts.putAll(newCompanionForced);
+
+        for (Zone zone : ZoneRepository.getEnabledZones()) {
+            ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
+            if (!zState.active) continue;
+            for (MobRule rule : zone.mobs) {
+                if (rule.spawnType == SpawnType.UNIQUE) {
+                    checkUniqueEncounterCleared(zone.id, rule.id, false, false);
+                }
+            }
+        }
+    }
+
+    private static Box getManagedMobScanBox(Zone zone) {
+        int padding = Math.max(0, RuntimeConfigStorage.getConfig().boundaryScanPadding);
+        return zone.getExpandedBox(padding);
     }
 }

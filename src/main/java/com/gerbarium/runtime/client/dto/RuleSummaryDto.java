@@ -7,6 +7,10 @@ public class RuleSummaryDto {
     public String entity;
     public String spawnType;
     public int aliveCount;
+    public int normalPrimaryAlive;
+    public int forcedPrimaryAlive;
+    public int normalCompanionAlive;
+    public int forcedCompanionAlive;
     public int maxAlive;
     public boolean active;
     public boolean enabled;

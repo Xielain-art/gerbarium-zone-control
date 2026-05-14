@@ -1,12 +1,19 @@
 package com.gerbarium.runtime.spawn;
 
-import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.model.MobRule;
-import net.minecraft.entity.Entity;
+import com.gerbarium.runtime.model.Zone;
 import net.minecraft.block.BlockState;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityDimensions;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.SpawnRestriction;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 
 import java.util.List;
@@ -16,150 +23,159 @@ import java.util.Random;
 public class SpawnPositionFinder {
     private static final Random RANDOM = new Random();
 
-    public static Optional<BlockPos> findSpawnPosition(ServerWorld world, Zone zone, List<ServerPlayerEntity> nearbyPlayers) {
-        int minX = zone.getMinX();
-        int maxX = zone.getMaxX();
-        int minY = zone.getMinY();
-        int maxY = zone.getMaxY();
-        int minZ = zone.getMinZ();
-        int maxZ = zone.getMaxZ();
+    public static Optional<BlockPos> findSpawnPosition(ServerWorld world, Zone zone, MobRule rule, List<ServerPlayerEntity> nearbyPlayers) {
+        Optional<EntityType<?>> type = getEntityType(rule == null ? null : rule.entity);
+        if (type.isEmpty()) return Optional.empty();
+
         int minDistance = Math.max(0, Math.min(zone.spawn.minDistanceFromPlayer, zone.spawn.maxDistanceFromPlayer));
         int maxDistance = Math.max(minDistance, Math.max(zone.spawn.minDistanceFromPlayer, zone.spawn.maxDistanceFromPlayer));
+        List<ServerPlayerEntity> players = nearbyPlayers == null ? List.of() : nearbyPlayers;
 
-        if (nearbyPlayers.isEmpty()) {
-            BlockPos fallback = new BlockPos((minX + maxX) / 2, Math.max(minY, Math.min(maxY, (minY + maxY) / 2)), (minZ + maxZ) / 2);
-            if (world.getBlockState(fallback).isAir() && world.getBlockState(fallback.down()).isSolidBlock(world, fallback.down())) {
-                return Optional.of(fallback);
-            }
-            return Optional.empty();
+        if (players.isEmpty()) {
+            Optional<BlockPos> center = scanColumn(world, zone, type.get(), (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2);
+            return center.or(() -> findRandomInside(world, zone, type.get(), Math.max(24, zone.spawn.maxPositionAttempts)));
         }
 
-        ServerPlayerEntity targetPlayer = nearbyPlayers.get(RANDOM.nextInt(nearbyPlayers.size()));
+        ServerPlayerEntity targetPlayer = players.get(RANDOM.nextInt(players.size()));
         BlockPos playerPos = targetPlayer.getBlockPos();
 
-        for (int i = 0; i < zone.spawn.maxPositionAttempts; i++) {
+        for (int i = 0; i < Math.max(1, zone.spawn.maxPositionAttempts); i++) {
             double angle = RANDOM.nextDouble() * Math.PI * 2;
-            double distance = minDistance + RANDOM.nextDouble() * (maxDistance - minDistance);
-
+            double distance = minDistance + RANDOM.nextDouble() * Math.max(1, maxDistance - minDistance);
             int x = playerPos.getX() + (int) (Math.cos(angle) * distance);
             int z = playerPos.getZ() + (int) (Math.sin(angle) * distance);
 
-            // Clamp to zone bounds
-            x = MathHelper.clamp(x, minX, maxX);
-            z = MathHelper.clamp(z, minZ, maxZ);
+            x = MathHelper.clamp(x, zone.getMinX(), zone.getMaxX());
+            z = MathHelper.clamp(z, zone.getMinZ(), zone.getMaxZ());
 
-            if (zone.spawn.requireLoadedChunk && !world.isChunkLoaded(x >> 4, z >> 4)) {
-                continue;
-            }
+            if (!isDistanceAllowed(x, z, players, minDistance, maxDistance)) continue;
 
-            for (int y = maxY; y >= minY; y--) {
-                BlockPos pos = new BlockPos(x, y, z);
-                if (isValidSpawnPosition(world, pos, zone.spawn.respectVanillaSpawnRules)) {
-                    return Optional.of(pos);
-                }
-            }
+            Optional<BlockPos> pos = scanColumn(world, zone, type.get(), x, z);
+            if (pos.isPresent()) return pos;
         }
 
         return Optional.empty();
     }
 
     public static Optional<BlockPos> findReturnPosition(ServerWorld world, Zone zone, MobRule rule, Entity entity, List<ServerPlayerEntity> nearbyPlayers) {
-        int minX = zone.getMinX();
-        int maxX = zone.getMaxX();
-        int minY = zone.getMinY();
-        int maxY = zone.getMaxY();
-        int minZ = zone.getMinZ();
-        int maxZ = zone.getMaxZ();
+        EntityType<?> type = entity == null ? null : entity.getType();
+        List<ServerPlayerEntity> players = nearbyPlayers == null ? List.of() : nearbyPlayers;
 
-        if (nearbyPlayers != null && !nearbyPlayers.isEmpty()) {
-            ServerPlayerEntity player = nearbyPlayers.get(RANDOM.nextInt(nearbyPlayers.size()));
-            BlockPos playerPos = player.getBlockPos();
-            Optional<BlockPos> aroundPlayer = findSafeInsidePosition(world, minX, maxX, minY, maxY, minZ, maxZ, playerPos.getX(), playerPos.getZ(), Math.max(4, zone.spawn.minDistanceFromPlayer), Math.max(8, zone.spawn.maxDistanceFromPlayer));
-            if (aroundPlayer.isPresent()) {
-                return aroundPlayer;
+        if (!players.isEmpty()) {
+            ServerPlayerEntity player = players.get(RANDOM.nextInt(players.size()));
+            Optional<BlockPos> aroundPlayer = findSafeInsidePosition(world, zone, type, player.getBlockX(), player.getBlockZ(),
+                    Math.max(4, zone.spawn.minDistanceFromPlayer), Math.max(8, zone.spawn.maxDistanceFromPlayer));
+            if (aroundPlayer.isPresent()) return aroundPlayer;
+        }
+
+        Optional<BlockPos> aroundEntity = findSafeInsidePosition(world, zone, type,
+                entity == null ? (zone.getMinX() + zone.getMaxX()) / 2 : entity.getBlockX(),
+                entity == null ? (zone.getMinZ() + zone.getMaxZ()) / 2 : entity.getBlockZ(),
+                0, Math.max(8, Math.min(zone.getMaxX() - zone.getMinX(), zone.getMaxZ() - zone.getMinZ())));
+        if (aroundEntity.isPresent()) return aroundEntity;
+
+        return scanColumn(world, zone, type, (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2);
+    }
+
+    public static Optional<BlockPos> findCompanionPosition(ServerWorld world, Zone zone, EntityType<?> type, BlockPos center, int radius) {
+        int safeRadius = Math.max(1, radius);
+        for (int i = 0; i < Math.max(8, safeRadius * 2); i++) {
+            int x = center.getX() + RANDOM.nextInt(safeRadius * 2 + 1) - safeRadius;
+            int z = center.getZ() + RANDOM.nextInt(safeRadius * 2 + 1) - safeRadius;
+            x = MathHelper.clamp(x, zone.getMinX(), zone.getMaxX());
+            z = MathHelper.clamp(z, zone.getMinZ(), zone.getMaxZ());
+
+            int startY = Math.min(zone.getMaxY(), center.getY() + 2);
+            int endY = Math.max(zone.getMinY(), center.getY() - 3);
+            for (int y = startY; y >= endY; y--) {
+                BlockPos pos = new BlockPos(x, y, z);
+                if (isSafeSpawnPosition(world, type, pos, false)) return Optional.of(pos);
             }
         }
-
-        Optional<BlockPos> randomInside = findSafeInsidePosition(world, minX, maxX, minY, maxY, minZ, maxZ, entity.getBlockX(), entity.getBlockZ(), 0, Math.max(8, Math.min(maxX - minX, maxZ - minZ)));
-        if (randomInside.isPresent()) {
-            return randomInside;
-        }
-
-        BlockPos center = new BlockPos((minX + maxX) / 2, Math.max(minY, Math.min(maxY, (minY + maxY) / 2)), (minZ + maxZ) / 2);
-        if (isSafeInsidePosition(world, center)) {
-            return Optional.of(center);
-        }
-
-        for (int y = maxY; y >= minY; y--) {
-            BlockPos pos = new BlockPos((minX + maxX) / 2, y, (minZ + maxZ) / 2);
-            if (isSafeInsidePosition(world, pos)) {
-                return Optional.of(pos);
-            }
-        }
-
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> findSafeInsidePosition(ServerWorld world, int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
-                                                             int centerX, int centerZ, int minDistance, int maxDistance) {
+    private static Optional<BlockPos> findSafeInsidePosition(ServerWorld world, Zone zone, EntityType<?> type, int centerX, int centerZ, int minDistance, int maxDistance) {
         int attempts = Math.max(12, (maxDistance - minDistance + 1) * 2);
-
         for (int i = 0; i < attempts; i++) {
             double angle = RANDOM.nextDouble() * Math.PI * 2;
             double distance = minDistance + RANDOM.nextDouble() * Math.max(1, maxDistance - minDistance + 1);
-
-            int x = centerX + (int) (Math.cos(angle) * distance);
-            int z = centerZ + (int) (Math.sin(angle) * distance);
-            x = MathHelper.clamp(x, minX, maxX);
-            z = MathHelper.clamp(z, minZ, maxZ);
-
-            if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-                continue;
-            }
-
-            for (int y = maxY; y >= minY; y--) {
-                BlockPos pos = new BlockPos(x, y, z);
-                if (isSafeInsidePosition(world, pos)) {
-                    return Optional.of(pos);
-                }
-            }
+            int x = MathHelper.clamp(centerX + (int) (Math.cos(angle) * distance), zone.getMinX(), zone.getMaxX());
+            int z = MathHelper.clamp(centerZ + (int) (Math.sin(angle) * distance), zone.getMinZ(), zone.getMaxZ());
+            Optional<BlockPos> pos = scanColumn(world, zone, type, x, z);
+            if (pos.isPresent()) return pos;
         }
-
         return Optional.empty();
     }
 
-    private static boolean isValidSpawnPosition(ServerWorld world, BlockPos pos, boolean respectVanillaRules) {
-        BlockState state = world.getBlockState(pos);
-        if (!state.isAir()) return false;
+    private static Optional<BlockPos> findRandomInside(ServerWorld world, Zone zone, EntityType<?> type, int attempts) {
+        for (int i = 0; i < attempts; i++) {
+            Optional<BlockPos> pos = scanColumn(world, zone, type, randomBetween(zone.getMinX(), zone.getMaxX()), randomBetween(zone.getMinZ(), zone.getMaxZ()));
+            if (pos.isPresent()) return pos;
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<BlockPos> scanColumn(ServerWorld world, Zone zone, EntityType<?> type, int x, int z) {
+        if (!SpawnMathUtil.isInsideZoneXZ(x, z, zone.getMinX(), zone.getMaxX(), zone.getMinZ(), zone.getMaxZ())) return Optional.empty();
+        if (zone.spawn.requireLoadedChunk && !world.isChunkLoaded(x >> 4, z >> 4)) return Optional.empty();
+
+        for (int y = zone.getMaxY(); y >= zone.getMinY(); y--) {
+            BlockPos pos = new BlockPos(x, y, z);
+            if (isSafeSpawnPosition(world, type, pos, zone.spawn.respectVanillaSpawnRules)) return Optional.of(pos);
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isSafeSpawnPosition(ServerWorld world, EntityType<?> type, BlockPos pos, boolean respectVanillaRules) {
+        if (!world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) return false;
+
+        BlockState feet = world.getBlockState(pos);
+        if (!feet.isAir()) return false;
+
+        BlockState head = world.getBlockState(pos.up());
+        if (!head.isAir()) return false;
 
         BlockState below = world.getBlockState(pos.down());
         if (!below.isSolidBlock(world, pos.down())) return false;
 
-        if (respectVanillaRules) {
-            // Very basic vanilla-like check: check if entity can be at this position
-            // For a more robust check, we'd need the EntityType
-            return world.getBlockState(pos.up()).isAir();
+        if (type != null) {
+            EntityDimensions dimensions = type.getDimensions();
+            Box box = dimensions.getBoxAt(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D);
+            if (!world.isSpaceEmpty(box)) return false;
         }
 
-        return true;
+        return !respectVanillaRules || canSpawnByVanillaRules(world, type, pos);
     }
 
-    private static boolean isSafeInsidePosition(ServerWorld world, BlockPos pos) {
-        if (!world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) {
-            return false;
-        }
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean canSpawnByVanillaRules(ServerWorld world, EntityType<?> type, BlockPos pos) {
+        if (type == null) return true;
+        return SpawnRestriction.canSpawn((EntityType) type, world, SpawnReason.SPAWNER, pos, world.random);
+    }
 
-        BlockState state = world.getBlockState(pos);
-        if (!state.isAir()) {
-            return false;
-        }
+    private static Optional<EntityType<?>> getEntityType(String entityId) {
+        Identifier id = Identifier.tryParse(entityId == null ? "" : entityId);
+        return id == null ? Optional.empty() : Registries.ENTITY_TYPE.getOrEmpty(id);
+    }
 
-        BlockState above = world.getBlockState(pos.up());
-        if (!above.isAir()) {
-            return false;
+    public static boolean isDistanceAllowed(int x, int z, List<ServerPlayerEntity> players, int minDistance, int maxDistance) {
+        if (players == null || players.isEmpty()) return true;
+        int min = Math.max(0, minDistance);
+        int max = Math.max(min, maxDistance);
+        double minSq = min * min;
+        double maxSq = max * max;
+        for (ServerPlayerEntity player : players) {
+            double dx = (x + 0.5D) - player.getX();
+            double dz = (z + 0.5D) - player.getZ();
+            double distSq = dx * dx + dz * dz;
+            if (distSq >= minSq && distSq <= maxSq) return true;
         }
+        return false;
+    }
 
-        BlockState below = world.getBlockState(pos.down());
-        return below.isSolidBlock(world, pos.down());
+    private static int randomBetween(int min, int max) {
+        if (max <= min) return min;
+        return min + RANDOM.nextInt(max - min + 1);
     }
 }

@@ -39,5 +39,17 @@ public class MobRule {
         if (spawnType == null) {
             spawnType = SpawnType.PACK;
         }
+        if (boundaryMode == null || boundaryMode.isBlank()) {
+            boundaryMode = BoundaryMode.LEASH.name();
+        }
+        if (name == null || name.isBlank()) {
+            name = id;
+        }
+        chance = Math.max(0.0D, Math.min(1.0D, chance));
+        maxAlive = Math.max(0, maxAlive);
+        spawnCount = Math.max(0, spawnCount);
+        respawnSeconds = Math.max(0, respawnSeconds);
+        failedSpawnRetrySeconds = Math.max(1, failedSpawnRetrySeconds);
+        boundaryMaxOutsideSeconds = Math.max(0, boundaryMaxOutsideSeconds);
     }
 }

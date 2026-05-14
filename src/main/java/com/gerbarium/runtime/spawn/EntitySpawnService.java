@@ -101,8 +101,9 @@ public class EntitySpawnService {
             EntityType<?> type = typeOpt.get();
 
             for (int i = 0; i < companion.count; i++) {
-                BlockPos pos = findCompanionPos(world, primaryPos, companion.radius, minX, maxX, minY, maxY, minZ, maxZ);
-                if (pos == null) continue;
+                Optional<BlockPos> companionPos = SpawnPositionFinder.findCompanionPosition(world, zone, type, primaryPos, companion.radius);
+                if (companionPos.isEmpty()) continue;
+                BlockPos pos = companionPos.get();
 
                 Entity entity = type.create(world);
                 if (entity == null) continue;
@@ -128,21 +129,4 @@ public class EntitySpawnService {
         return spawnedCount;
     }
 
-    private static BlockPos findCompanionPos(ServerWorld world, BlockPos center, int radius, int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
-        for (int i = 0; i < 5; i++) {
-            int x = center.getX() + RANDOM.nextInt(radius * 2 + 1) - radius;
-            int z = center.getZ() + RANDOM.nextInt(radius * 2 + 1) - radius;
-
-            x = Math.max(minX, Math.min(maxX, x));
-            z = Math.max(minZ, Math.min(maxZ, z));
-
-            for (int y = Math.min(maxY, center.getY() + 2); y >= Math.max(minY, center.getY() - 2); y--) {
-                BlockPos pos = new BlockPos(x, y, z);
-                if (world.getBlockState(pos).isAir() && world.getBlockState(pos.down()).isSolidBlock(world, pos.down())) {
-                    return pos;
-                }
-            }
-        }
-        return null;
-    }
 }

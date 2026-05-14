@@ -16,7 +16,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
 
-public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView {
+public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView, RuntimeRuleDetailsView {
     private final Screen parent;
     private final String zoneId;
     private final String ruleId;
@@ -41,6 +41,14 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     }
 
     @Override
+    public void updateRuleDetails(RuleSummaryDto rule) {
+        this.rule = rule;
+        if (this.body != null) {
+            rebuildBody();
+        }
+    }
+
+    @Override
     protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
         return OwoUIAdapter.create(this, Containers::verticalFlow);
     }
@@ -57,6 +65,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         this.body.surface(Surface.PANEL).padding(Insets.of(RuntimeUi.PAD_CARD));
         root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), body).margins(Insets.top(RuntimeUi.GAP_SECTION)));
 
+        requestRuleDetails();
         rebuildBody();
     }
 
@@ -69,7 +78,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         titleRow.child(RuntimeUi.label(rule == null ? ruleId : displayName(rule) + " (" + ruleId + ")", RuntimeUi.COLOR_LABEL).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         header.child(titleRow);
 
-        header.child(RuntimeUi.dim("Snapshot-backed diagnostics for one mob rule.").margins(Insets.top(RuntimeUi.GAP_TINY)));
+        header.child(RuntimeUi.dim("Live diagnostics for one mob rule.").margins(Insets.top(RuntimeUi.GAP_TINY)));
         header.child(buildActions().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         return header;
     }
@@ -79,7 +88,7 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
 
         FlowLayout row1 = RuntimeUi.row();
         row1.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
-        row1.child(RuntimeUi.button("Refresh", this::requestSnapshot).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row1.child(RuntimeUi.button("Refresh", this::requestRuleDetails).margins(Insets.left(RuntimeUi.GAP_TINY)));
         row1.child(RuntimeUi.button("Rule History", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, ruleId))).margins(Insets.left(RuntimeUi.GAP_TINY)));
         col.child(row1);
 
@@ -163,8 +172,10 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
 
     private FlowLayout buildCountersSection() {
         FlowLayout sec = RuntimeUi.section("Counters");
-        sec.child(RuntimeUi.kv("Primary alive", String.valueOf(rule.aliveCount)));
-        sec.child(RuntimeUi.kv("Companions alive", String.valueOf(rule.encounterCompanionsAlive)));
+        sec.child(RuntimeUi.kv("Normal primary alive", String.valueOf(rule.normalPrimaryAlive)));
+        sec.child(RuntimeUi.kv("Forced primary alive", String.valueOf(rule.forcedPrimaryAlive)));
+        sec.child(RuntimeUi.kv("Normal companions alive", String.valueOf(rule.normalCompanionAlive)));
+        sec.child(RuntimeUi.kv("Forced companions alive", String.valueOf(rule.forcedCompanionAlive)));
         sec.child(RuntimeUi.kv("Known alive", String.valueOf(rule.knownAlive)));
         sec.child(RuntimeUi.kv("Total attempts", String.valueOf(rule.totalAttempts)));
         sec.child(RuntimeUi.kv("Total successes", String.valueOf(rule.totalSuccesses)));
@@ -290,12 +301,18 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     }
 
     private void sendAction(String action) {
+        String[] parts = action.split(":", 3);
         var buf = PacketByteBufs.create();
-        buf.writeString(action);
-        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
+        buf.writeString(parts[0]);
+        buf.writeString(zoneId);
+        buf.writeString(ruleId);
+        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_RULE_ACTION, buf);
     }
 
-    private void requestSnapshot() {
-        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
+    private void requestRuleDetails() {
+        var buf = PacketByteBufs.create();
+        buf.writeString(zoneId);
+        buf.writeString(ruleId);
+        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RULE_DETAILS, buf);
     }
 }

@@ -1,6 +1,7 @@
 package com.gerbarium.runtime.client.gui;
 
 import com.gerbarium.runtime.client.dto.RuntimeEventDto;
+import com.gerbarium.runtime.client.dto.RuntimeEventsDto;
 import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
 import com.gerbarium.runtime.network.GerbariumRuntimePackets;
 import com.gerbarium.runtime.util.TimeUtil;
@@ -21,13 +22,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView {
+public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView, RuntimeEventsView {
     private static final int PAGE_SIZE = 12;
 
     private final Screen parent;
     private RuntimeSnapshotDto snapshot;
     private final String fixedZoneId;
     private final String fixedRuleId;
+    private List<RuntimeEventDto> dedicatedEvents = List.of();
+    private boolean dedicatedEventsLoaded = false;
 
     private FlowLayout eventsList;
     private TextBoxComponent searchBox;
@@ -62,6 +65,15 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     @Override
+    public void updateEvents(RuntimeEventsDto events) {
+        this.dedicatedEvents = events == null || events.events == null ? List.of() : events.events;
+        this.dedicatedEventsLoaded = true;
+        if (this.eventsList != null) {
+            rebuildEventsList();
+        }
+    }
+
+    @Override
     protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
         return OwoUIAdapter.create(this, Containers::verticalFlow);
     }
@@ -77,6 +89,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
         this.eventsList = RuntimeUi.col();
         root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), eventsList).margins(Insets.top(RuntimeUi.GAP_SECTION)));
 
+        requestEvents();
         rebuildEventsList();
     }
 
@@ -99,7 +112,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
 
         FlowLayout btnRow = RuntimeUi.row();
         btnRow.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
-        btnRow.child(RuntimeUi.button("Refresh", this::requestSnapshot).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btnRow.child(RuntimeUi.button("Refresh", this::requestEvents).margins(Insets.left(RuntimeUi.GAP_TINY)));
         btnRow.child(RuntimeUi.button("Clear filters", this::clearFilters).margins(Insets.left(RuntimeUi.GAP_TINY)));
         btnRow.child(RuntimeUi.button("Type: " + typeFilter, this::cycleTypeFilter).margins(Insets.left(RuntimeUi.GAP_TINY)));
         btnRow.child(RuntimeUi.button("Zone: " + zoneLabel(), this::cycleZoneFilter).margins(Insets.left(RuntimeUi.GAP_TINY)));
@@ -152,7 +165,7 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     }
 
     private List<RuntimeEventDto> filteredEvents() {
-        List<RuntimeEventDto> all = snapshot == null || snapshot.recentEvents == null ? List.of() : snapshot.recentEvents;
+        List<RuntimeEventDto> all = dedicatedEventsLoaded ? dedicatedEvents : (snapshot == null || snapshot.recentEvents == null ? List.of() : snapshot.recentEvents);
         List<RuntimeEventDto> result = new ArrayList<>();
         for (RuntimeEventDto event : all) {
             if (!"ALL".equals(typeFilter) && (event.type == null || !event.type.toUpperCase(Locale.ROOT).contains(typeFilter))) {
@@ -299,7 +312,10 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
         rebuildEventsList();
     }
 
-    private void requestSnapshot() {
-        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
+    private void requestEvents() {
+        var buf = PacketByteBufs.create();
+        buf.writeString(fixedZoneId == null ? "" : fixedZoneId);
+        buf.writeString(fixedRuleId == null ? "" : fixedRuleId);
+        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_EVENTS, buf);
     }
 }

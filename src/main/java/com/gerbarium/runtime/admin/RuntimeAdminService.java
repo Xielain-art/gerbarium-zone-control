@@ -40,6 +40,7 @@ public class RuntimeAdminService {
         int enabled = (int) newZones.stream().filter(z -> z.enabled).count();
 
         GerbariumRegionsRuntime.LOGGER.info("Zones reloaded by " + adminName);
+        RuntimeStateStorage.addEvent(null, null, "RELOAD", "Zones reloaded by " + adminName);
 
         ActionResultDto result = new ActionResultDto(true, "Reloaded zones successfully");
         result.loadedZones = loaded;
@@ -109,7 +110,7 @@ public class RuntimeAdminService {
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
-        Box box = zone.getZoneBox();
+        Box box = zone.getExpandedBox(RuntimeConfigStorage.getConfig().boundaryScanPadding);
         int removed = 0;
         for (Entity entity : world.getOtherEntities(null, box)) {
             var infoOpt = MobTagger.getInfo(entity);
@@ -121,7 +122,7 @@ public class RuntimeAdminService {
         }
 
         MobTracker.resyncZone(server, zone);
-        RuntimeStateStorage.addEvent(zoneId, null, "CLEAR_MOBS", "Cleared " + removed + " mobs by " + adminName);
+        RuntimeStateStorage.addEvent(zoneId, null, "ZONE_CLEARED", "Cleared " + removed + " mobs by " + adminName);
 
         return new ActionResultDto(true, "Cleared " + removed + " managed mobs in zone " + zoneId);
     }
@@ -141,11 +142,10 @@ public class RuntimeAdminService {
         for (MobRule rule : zone.mobs) {
             if (!rule.enabled) continue;
 
-            int alive = MobTracker.getNormalPrimaryAliveCount(zoneId, rule.id);
-            int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
+            int toSpawn = rule.spawnType == SpawnType.UNIQUE ? 1 : Math.max(1, rule.spawnCount);
 
             for (int i = 0; i < toSpawn; i++) {
-                Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
+                Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
                 if (pos.isPresent()) {
                     var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
                     if (primary != null) {
@@ -185,7 +185,7 @@ public class RuntimeAdminService {
             }
         }
 
-        RuntimeStateStorage.addEvent(null, null, "CLEANUP_ORPHANS", "Removed " + removedCount + " orphaned mobs by " + adminName);
+        RuntimeStateStorage.addEvent(null, null, "ORPHANS_CLEANED", "Removed " + removedCount + " orphaned mobs by " + adminName);
         return new ActionResultDto(true, "Cleanup complete. Removed " + removedCount + " orphaned managed mobs.");
     }
 
@@ -194,6 +194,7 @@ public class RuntimeAdminService {
         if (zoneOpt.isEmpty()) return new ActionResultDto(false, "Zone not found");
 
         RuntimeStateStorage.clearZoneState(zoneId);
+        RuntimeStateStorage.addEvent(zoneId, null, "STATE_CLEARED", "Zone state cleared by " + adminName);
         GerbariumRegionsRuntime.LOGGER.info("Cleared zone state for " + zoneId + " by " + adminName);
         return new ActionResultDto(true, "Zone state cleared for " + zoneId);
     }
@@ -206,6 +207,7 @@ public class RuntimeAdminService {
         if (ruleOpt.isEmpty()) return new ActionResultDto(false, "Rule not found");
 
         RuntimeStateStorage.clearRuleState(zoneId, ruleId);
+        RuntimeStateStorage.addEvent(zoneId, ruleId, "STATE_CLEARED", "Rule state cleared by " + adminName);
         GerbariumRegionsRuntime.LOGGER.info("Cleared rule state for " + zoneId + ":" + ruleId + " by " + adminName);
         return new ActionResultDto(true, "Rule state cleared for " + zoneId + ":" + ruleId);
     }
@@ -244,13 +246,12 @@ public class RuntimeAdminService {
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
-        int alive = MobTracker.getNormalPrimaryAliveCount(zoneId, rule.id);
-        int toSpawn = rule.spawnType == SpawnType.UNIQUE ? (alive >= 1 ? 0 : 1) : Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
+        int toSpawn = rule.spawnType == SpawnType.UNIQUE ? 1 : Math.max(1, rule.spawnCount);
 
         int totalPrimary = 0;
         int totalCompanions = 0;
         for (int i = 0; i < toSpawn; i++) {
-            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
+            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
             if (pos.isPresent()) {
                 var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
                 if (primary != null) {
@@ -260,7 +261,7 @@ public class RuntimeAdminService {
             }
         }
 
-        RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_RULE", "Rule force spawn by " + adminName + ": " + totalPrimary + "P + " + totalCompanions + "C");
+        RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN", "Rule force spawn by " + adminName + ": " + totalPrimary + "P + " + totalCompanions + "C");
         ActionResultDto result = new ActionResultDto(true, "Force spawn completed for rule " + ruleId);
         result.primarySpawned = totalPrimary;
         result.companionsSpawned = totalCompanions;
@@ -280,7 +281,7 @@ public class RuntimeAdminService {
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
-        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
+        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
         if (pos.isEmpty()) return new ActionResultDto(false, "No valid spawn position found");
 
         var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
@@ -315,11 +316,14 @@ public class RuntimeAdminService {
             var typeOpt = net.minecraft.registry.Registries.ENTITY_TYPE.getOrEmpty(entityId);
             if (typeOpt.isEmpty()) continue;
             for (int i = 0; i < companion.count; i++) {
+                Optional<BlockPos> pos = SpawnPositionFinder.findCompanionPosition(world, zone, typeOpt.get(), refPos, companion.radius);
+                if (pos.isEmpty()) continue;
                 Entity entity = typeOpt.get().create(world);
                 if (entity == null) continue;
-                entity.refreshPositionAndAngles(refPos.getX() + 0.5, refPos.getY(), refPos.getZ() + 0.5, 0, 0);
+                BlockPos spawnPos = pos.get();
+                entity.refreshPositionAndAngles(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
                 if (entity instanceof net.minecraft.entity.mob.MobEntity mob) {
-                    mob.initialize(world, world.getLocalDifficulty(refPos), net.minecraft.entity.SpawnReason.SPAWNER, null, null);
+                    mob.initialize(world, world.getLocalDifficulty(spawnPos), net.minecraft.entity.SpawnReason.SPAWNER, null, null);
                     mob.setPersistent();
                 }
                 com.gerbarium.runtime.tracking.MobTagger.tagCompanion(entity, zone.id, rule.id, companion.id, true);
@@ -347,7 +351,7 @@ public class RuntimeAdminService {
         ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
         if (world == null) return new ActionResultDto(false, "World unavailable");
 
-        Box box = zone.getZoneBox();
+        Box box = zone.getExpandedBox(RuntimeConfigStorage.getConfig().boundaryScanPadding);
 
         int removed = 0;
         for (Entity entity : world.getOtherEntities(null, box)) {

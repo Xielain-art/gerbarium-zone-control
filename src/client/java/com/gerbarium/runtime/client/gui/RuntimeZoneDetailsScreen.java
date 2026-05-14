@@ -16,7 +16,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.NotNull;
 
-public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView {
+public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implements RuntimeSnapshotView, RuntimeZoneDetailsView {
     private final Screen parent;
     private final String zoneId;
     private ZoneSummaryDto zone;
@@ -40,6 +40,14 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     }
 
     @Override
+    public void updateZoneDetails(ZoneSummaryDto zone) {
+        this.zone = zone;
+        if (this.body != null) {
+            rebuildBody();
+        }
+    }
+
+    @Override
     protected @NotNull OwoUIAdapter<FlowLayout> createAdapter() {
         return OwoUIAdapter.create(this, Containers::verticalFlow);
     }
@@ -52,6 +60,7 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         root.child(buildHeader());
         this.body = RuntimeUi.col();
         root.child(Containers.verticalScroll(Sizing.fill(100), Sizing.fill(78), body).margins(Insets.top(RuntimeUi.GAP_SECTION)));
+        requestZoneDetails();
         rebuildBody();
     }
 
@@ -62,7 +71,7 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         titleRow.child(RuntimeUi.title("Zone Details"));
         titleRow.child(RuntimeUi.label(zone == null ? zoneId : displayName(zone) + " (" + zoneId + ")", RuntimeUi.COLOR_LABEL).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         header.child(titleRow);
-        header.child(RuntimeUi.dim("Snapshot-backed runtime overview for a single zone.").margins(Insets.top(RuntimeUi.GAP_TINY)));
+        header.child(RuntimeUi.dim("Live runtime overview for a single zone.").margins(Insets.top(RuntimeUi.GAP_TINY)));
         header.child(buildActions().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         return header;
     }
@@ -71,7 +80,7 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         FlowLayout col = RuntimeUi.col();
         FlowLayout row1 = RuntimeUi.row();
         row1.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
-        row1.child(RuntimeUi.button("Refresh", this::requestSnapshot).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row1.child(RuntimeUi.button("Refresh", this::requestZoneDetails).margins(Insets.left(RuntimeUi.GAP_TINY)));
         row1.child(RuntimeUi.button("Events", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, null))).margins(Insets.left(RuntimeUi.GAP_TINY)));
         col.child(row1);
 
@@ -125,6 +134,14 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Priority", String.valueOf(zone.priority)));
         sec.child(RuntimeUi.kv("Boundary control", RuntimeUi.boolText(zone.boundaryControlEnabled)));
         sec.child(RuntimeUi.kv("Boundary scan padding", String.valueOf(zone.boundaryScanPadding)));
+        sec.child(RuntimeUi.kv("Activation range", String.valueOf(zone.activationRange)));
+        sec.child(RuntimeUi.kv("Deactivate after", zone.deactivateAfterSeconds + "s"));
+        sec.child(RuntimeUi.kv("First spawn delay", zone.firstSpawnDelaySeconds + "s"));
+        sec.child(RuntimeUi.kv("Reactivation cooldown", zone.reactivationCooldownSeconds + "s"));
+        sec.child(RuntimeUi.kv("Spawn distance", zone.spawnMinDistanceFromPlayer + "-" + zone.spawnMaxDistanceFromPlayer));
+        sec.child(RuntimeUi.kv("Position attempts", String.valueOf(zone.spawnMaxPositionAttempts)));
+        sec.child(RuntimeUi.kv("Require loaded chunk", RuntimeUi.boolText(zone.spawnRequireLoadedChunk)));
+        sec.child(RuntimeUi.kv("Respect spawn rules", RuntimeUi.boolText(zone.spawnRespectVanillaSpawnRules)));
         sec.child(RuntimeUi.kv("Bounds min", zone.minX + ", " + zone.minY + ", " + zone.minZ));
         sec.child(RuntimeUi.kv("Bounds max", zone.maxX + ", " + zone.maxY + ", " + zone.maxZ));
         sec.child(RuntimeUi.kv("State file exists", RuntimeUi.boolText(zone.stateFileExists)));
@@ -202,12 +219,16 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     }
 
     private void sendAction(String action) {
+        String[] parts = action.split(":", 2);
         var buf = PacketByteBufs.create();
-        buf.writeString(action);
-        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_GLOBAL_ACTION, buf);
+        buf.writeString(parts[0]);
+        buf.writeString(zoneId);
+        ClientPlayNetworking.send(GerbariumRuntimePackets.RUN_ZONE_ACTION, buf);
     }
 
-    private void requestSnapshot() {
-        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_RUNTIME_SNAPSHOT, PacketByteBufs.create());
+    private void requestZoneDetails() {
+        var buf = PacketByteBufs.create();
+        buf.writeString(zoneId);
+        ClientPlayNetworking.send(GerbariumRuntimePackets.REQUEST_ZONE_DETAILS, buf);
     }
 }

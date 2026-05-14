@@ -38,6 +38,15 @@ public class RuntimeRuleValidationUtilTest {
     }
 
     @Test
+    void uniqueOnActivationIsInvalid() {
+        MobRule rule = new MobRule();
+        rule.spawnType = SpawnType.UNIQUE;
+        rule.refillMode = RefillMode.ON_ACTIVATION;
+
+        assertEquals("FAILED_INVALID_RULE_CONFIG", RuntimeRuleValidationUtil.getConfigStatus(rule));
+    }
+
+    @Test
     void blankEntityIsInvalid() {
         MobRule rule = new MobRule();
         rule.entity = " ";

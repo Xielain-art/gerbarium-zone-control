@@ -79,13 +79,16 @@ public class RuntimeStateStorage {
             ensureStorageDirectories();
             touchMigrationMarkerIfNeeded();
 
+            Set<String> loadedZoneIds = new HashSet<>();
             for (Zone zone : loadedZones) {
+                loadedZoneIds.add(zone.id);
                 ZoneStateFile zf = loadZone(zone.id);
                 if (zf != null) {
                     ensureStateShape(zf, zone.id);
                     states.put(zone.id, zf);
                 }
             }
+            states.keySet().removeIf(zoneId -> !loadedZoneIds.contains(zoneId));
         } catch (IOException e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to initialize states directory", e);
         }
@@ -196,9 +199,21 @@ public class RuntimeStateStorage {
     }
 
     public static void addEvent(String zoneId, String ruleId, String type, String message) {
-        // Rate limit repeated skip events
-        boolean isSkipEvent = type.startsWith("SKIPPED_");
-        if (isSkipEvent) {
+        if (zoneId == null || zoneId.isBlank()) {
+            Collection<Zone> zones = ZoneRepository.getAll();
+            if (zones.isEmpty()) {
+                GerbariumRegionsRuntime.LOGGER.info("Runtime event without loaded zone [{}]: {}", type, message);
+                return;
+            }
+            for (Zone zone : zones) {
+                addEvent(zone.id, ruleId, type, message);
+            }
+            return;
+        }
+
+        boolean alwaysWrite = isAlwaysWriteEvent(type);
+        boolean rateLimited = !alwaysWrite && isRateLimitedEvent(type);
+        if (rateLimited) {
             String key = zoneId + ":" + (ruleId != null ? ruleId : "null") + ":" + type;
             Long lastTime = lastEventTimes.get(key);
             long now = System.currentTimeMillis();
@@ -218,6 +233,26 @@ public class RuntimeStateStorage {
             zf.recentEvents.remove(zf.recentEvents.size() - 1);
         }
         markDirty(zoneId);
+    }
+
+    private static boolean isAlwaysWriteEvent(String type) {
+        if (type == null) return false;
+        return type.contains("SUCCESS")
+                || type.contains("DEATH")
+                || type.contains("CLEARED")
+                || type.contains("FORCE")
+                || type.contains("CLEAR")
+                || "RELOAD".equals(type)
+                || "BOUNDARY_TELEPORT".equals(type)
+                || "BOUNDARY_REMOVED".equals(type);
+    }
+
+    private static boolean isRateLimitedEvent(String type) {
+        if (type == null) return false;
+        return type.startsWith("SKIPPED_")
+                || type.startsWith("FAILED_")
+                || type.startsWith("BOUNDARY_")
+                || type.endsWith("_SKIPPED");
     }
 
     public static void addBoundaryEvent(String zoneId, String ruleId, UUID entityUuid, String type, String message,

@@ -11,6 +11,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,19 +122,33 @@ public class ZoneActivationManager {
         List<ServerPlayerEntity> nearby = new ArrayList<>();
         String dimension = zone.dimension;
 
-        // Use expanded zone box with +1 on max to match isInsideZone semantics (inclusive max block)
-        Box box = zone.getExpandedBox(zone.activation.range);
+        Box box = zone.getZoneBox();
+        double rangeSquared = (double) zone.activation.range * zone.activation.range;
 
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             if (!player.isAlive() || player.isDisconnected()) {
                 continue;
             }
             if (player.getWorld().getRegistryKey().getValue().toString().equals(dimension)) {
-                if (box.contains(player.getPos())) {
+                Vec3d pos = player.getPos();
+                if (box.contains(pos) || squaredDistanceToBox(pos, box) <= rangeSquared) {
                     nearby.add(player);
                 }
             }
         }
         return nearby;
+    }
+
+    private static double squaredDistanceToBox(Vec3d pos, Box box) {
+        double dx = axisDistance(pos.x, box.minX, box.maxX);
+        double dy = axisDistance(pos.y, box.minY, box.maxY);
+        double dz = axisDistance(pos.z, box.minZ, box.maxZ);
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private static double axisDistance(double value, double min, double max) {
+        if (value < min) return min - value;
+        if (value > max) return value - max;
+        return 0;
     }
 }

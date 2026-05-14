@@ -10,6 +10,15 @@ public class ZoneSummaryDto {
     public String dimension;
     public boolean boundaryControlEnabled;
     public int boundaryScanPadding;
+    public int activationRange;
+    public int deactivateAfterSeconds;
+    public int firstSpawnDelaySeconds;
+    public int reactivationCooldownSeconds;
+    public int spawnMinDistanceFromPlayer;
+    public int spawnMaxDistanceFromPlayer;
+    public int spawnMaxPositionAttempts;
+    public boolean spawnRequireLoadedChunk;
+    public boolean spawnRespectVanillaSpawnRules;
     public boolean active;
     public boolean pendingActivation;
     public int nearbyPlayers;

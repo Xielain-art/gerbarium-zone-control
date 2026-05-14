@@ -110,17 +110,15 @@ public class ZoneMobSpawner {
             if (state.nextAvailableAt > now || state.nextAttemptAt > now) {
                 return 0;
             }
-        } else if (state.lastActivationSpawnAt > 0 && now - state.lastActivationSpawnAt < effectiveCooldown) {
-            return 0;
+        } else {
+            long lastRealAttempt = Math.max(state.lastActivationSpawnAt, state.lastAttemptAt);
+            if (lastRealAttempt > 0 && now - lastRealAttempt < effectiveCooldown) {
+                return 0;
+            }
         }
 
         int alive = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
-        if (!afterDeathCooldown) {
-            state.lastOnActivationAttemptActivationId = zState.activationId;
-        }
         if (alive >= rule.maxAlive) {
-            zoneState.totalSpawnAttempts++;
-            RuntimeStateStorage.markDirty(zone.id);
             return 0;
         }
 
@@ -132,12 +130,14 @@ public class ZoneMobSpawner {
             state.lastAttemptAt = now;
             state.lastAttemptResult = "SKIPPED_CHANCE_FAIL";
             state.lastAttemptReason = "Chance roll failed";
+            if (!afterDeathCooldown) {
+                state.lastOnActivationAttemptActivationId = zState.activationId;
+            }
             state.totalAttempts++;
             zoneState.totalSpawnAttempts++;
             RuntimeStateStorage.markDirty(zone.id);
             return 0;
         }
-        state.lastActivationSpawnAt = now;
 
         int toSpawn = Math.max(0, Math.min(rule.spawnCount, rule.maxAlive - alive));
         if (toSpawn <= 0) {
@@ -146,6 +146,10 @@ public class ZoneMobSpawner {
 
         int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, toSpawn);
         if (spawned > 0) {
+            state.lastActivationSpawnAt = now;
+            if (!afterDeathCooldown) {
+                state.lastOnActivationAttemptActivationId = zState.activationId;
+            }
             if (cooldownStart == CooldownStart.AFTER_ACTIVATION) {
                 state.nextAvailableAt = now + effectiveCooldown;
             }
@@ -169,6 +173,9 @@ public class ZoneMobSpawner {
             state.lastAttemptAt = now;
             state.lastAttemptResult = "FAILED_NO_POSITION";
             state.lastAttemptReason = "Could not find valid spawn position";
+            if (!afterDeathCooldown) {
+                state.lastOnActivationAttemptActivationId = zState.activationId;
+            }
             state.totalAttempts++;
             zoneState.totalSpawnAttempts++;
             state.nextAttemptAt = now + rule.failedSpawnRetrySeconds * 1000L;
@@ -222,12 +229,27 @@ public class ZoneMobSpawner {
 
         int spawned = spawnPackPrimaryAndCompanions(world, zone, rule, zState, state, now, SpawnContext.NORMAL, toSpawn);
         if (spawned > 0) {
+            state.lastAttemptAt = now;
+            state.lastAttemptResult = "SUCCESS";
+            state.lastAttemptReason = "Timed pack spawned " + spawned + " primary mobs";
+            state.lastSuccessAt = now;
+            state.lastSuccessfulPrimaryCount = spawned;
+            state.lastSuccessfulCompanionCount = state.lastEncounterCompanionsSpawned;
+            state.totalAttempts++;
+            state.totalSuccesses++;
+            state.totalPrimarySpawned += spawned;
+            state.totalCompanionsSpawned += state.lastEncounterCompanionsSpawned;
+            zoneState.totalSpawnAttempts++;
+            zoneState.totalSuccessfulSpawns++;
             state.timedSpawnedThisActivation += spawned;
             if (budget != -1 && state.timedSpawnedThisActivation >= budget) {
                 state.timedBudgetExhausted = true;
                 state.nextTimedSpawnInMillis = 0;
             }
-            RuntimeStateStorage.addEvent(zone.id, rule.id, "TIMED_PACK_SUCCESS", "Timed pack spawned " + spawned + " primary mobs");
+            RuntimeStateStorage.addEvent(zone.id, rule.id, "PACK_SUCCESS", "Timed pack spawned " + spawned + " primary mobs");
+            if (state.lastEncounterCompanionsSpawned > 0) {
+                RuntimeStateStorage.addEvent(zone.id, rule.id, "COMPANIONS_SPAWNED", "Spawned " + state.lastEncounterCompanionsSpawned + " companions");
+            }
         }
 
         RuntimeStateStorage.markDirty(zone.id);
@@ -276,7 +298,7 @@ public class ZoneMobSpawner {
             return 0;
         }
 
-        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
+        Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
         state.totalAttempts++;
         zoneState.totalSpawnAttempts++;
 
@@ -335,7 +357,7 @@ public class ZoneMobSpawner {
         int companionsSpawned = 0;
 
         for (int i = 0; i < spawnAttempts; i++) {
-            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, zState.nearbyPlayers);
+            Optional<BlockPos> pos = SpawnPositionFinder.findSpawnPosition(world, zone, rule, zState.nearbyPlayers);
             if (pos.isEmpty()) {
                 state.lastAttemptAt = now;
                 state.lastAttemptResult = "FAILED_NO_POSITION";

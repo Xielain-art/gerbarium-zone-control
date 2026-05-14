@@ -20,6 +20,7 @@ import com.gerbarium.runtime.util.TimeUtil;
 import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
 import com.gerbarium.runtime.util.RuntimeWorldUtil;
 import com.gerbarium.runtime.client.dto.RuntimeEventDto;
+import com.gerbarium.runtime.client.dto.RuntimeEventsDto;
 import com.gerbarium.runtime.client.dto.RuleSummaryDto;
 import com.gerbarium.runtime.client.dto.RuntimeSnapshotDto;
 import com.gerbarium.runtime.client.dto.ZoneSummaryDto;
@@ -47,6 +48,53 @@ public class GerbariumRuntimeServerNetworking {
                 PacketByteBuf responseBuf = PacketByteBufs.create();
                 responseBuf.writeString(GSON.toJson(snapshot));
                 ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RUNTIME_SNAPSHOT, responseBuf);
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_ZONE_DETAILS, (server, player, handler, buf, responseSender) -> {
+            if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
+            String zoneId = buf.readString();
+
+            server.execute(() -> {
+                ZoneSummaryDto zone = findZone(createSnapshot(server), zoneId);
+                if (zone == null) {
+                    sendActionResult(player, new ActionResultDto(false, "Zone not found: " + zoneId));
+                    return;
+                }
+                PacketByteBuf responseBuf = PacketByteBufs.create();
+                responseBuf.writeString(GSON.toJson(zone));
+                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_ZONE_DETAILS, responseBuf);
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_RULE_DETAILS, (server, player, handler, buf, responseSender) -> {
+            if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
+            String zoneId = buf.readString();
+            String ruleId = buf.readString();
+
+            server.execute(() -> {
+                ZoneSummaryDto zone = findZone(createSnapshot(server), zoneId);
+                RuleSummaryDto rule = findRule(zone, ruleId);
+                if (rule == null) {
+                    sendActionResult(player, new ActionResultDto(false, "Rule not found: " + zoneId + ":" + ruleId));
+                    return;
+                }
+                PacketByteBuf responseBuf = PacketByteBufs.create();
+                responseBuf.writeString(GSON.toJson(rule));
+                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RULE_DETAILS, responseBuf);
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.REQUEST_RUNTIME_EVENTS, (server, player, handler, buf, responseSender) -> {
+            if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
+            String zoneId = buf.readString();
+            String ruleId = buf.readString();
+
+            server.execute(() -> {
+                RuntimeEventsDto events = createEvents(server, zoneId, ruleId);
+                PacketByteBuf responseBuf = PacketByteBufs.create();
+                responseBuf.writeString(GSON.toJson(events));
+                ServerPlayNetworking.send(player, GerbariumRuntimePackets.SYNC_RUNTIME_EVENTS, responseBuf);
             });
         });
 
@@ -98,11 +146,61 @@ public class GerbariumRuntimeServerNetworking {
                     result = new ActionResultDto(false, "Unknown action: " + actionCode);
                 }
 
-                PacketByteBuf responseBuf = PacketByteBufs.create();
-                responseBuf.writeString(GSON.toJson(result));
-                ServerPlayNetworking.send(player, GerbariumRuntimePackets.ACTION_RESULT, responseBuf);
+                sendActionResult(player, result);
             });
         });
+
+        ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.RUN_ZONE_ACTION, (server, player, handler, buf, responseSender) -> {
+            if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
+            String actionCode = buf.readString();
+            String zoneId = buf.readString();
+
+            server.execute(() -> {
+                ActionResultDto result = runZoneAction(actionCode, zoneId, server, player);
+                sendActionResult(player, result);
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(GerbariumRuntimePackets.RUN_RULE_ACTION, (server, player, handler, buf, responseSender) -> {
+            if (!PermissionUtil.hasAdminPermission(player.getCommandSource())) return;
+            String actionCode = buf.readString();
+            String zoneId = buf.readString();
+            String ruleId = buf.readString();
+
+            server.execute(() -> {
+                ActionResultDto result = runRuleAction(actionCode, zoneId, ruleId, server, player);
+                sendActionResult(player, result);
+            });
+        });
+    }
+
+    private static void sendActionResult(ServerPlayerEntity player, ActionResultDto result) {
+        PacketByteBuf responseBuf = PacketByteBufs.create();
+        responseBuf.writeString(GSON.toJson(result));
+        ServerPlayNetworking.send(player, GerbariumRuntimePackets.ACTION_RESULT, responseBuf);
+    }
+
+    private static ActionResultDto runZoneAction(String actionCode, String zoneId, MinecraftServer server, ServerPlayerEntity player) {
+        return switch (actionCode) {
+            case "FORCE_ACTIVATE" -> RuntimeAdminService.forceActivateZone(zoneId, player.getName().getString());
+            case "FORCE_DEACTIVATE" -> RuntimeAdminService.forceDeactivateZone(zoneId, server, player.getName().getString());
+            case "FORCE_SPAWN" -> RuntimeAdminService.forceSpawnZone(zoneId, server, player.getName().getString());
+            case "CLEAR_ZONE" -> RuntimeAdminService.clearZoneMobs(zoneId, server, player.getName().getString());
+            case "CLEAR_ZONE_STATE" -> RuntimeAdminService.clearZoneState(zoneId, player.getName().getString());
+            default -> new ActionResultDto(false, "Unknown zone action: " + actionCode);
+        };
+    }
+
+    private static ActionResultDto runRuleAction(String actionCode, String zoneId, String ruleId, MinecraftServer server, ServerPlayerEntity player) {
+        return switch (actionCode) {
+            case "FORCE_RULE_SPAWN" -> RuntimeAdminService.forceSpawnRule(zoneId, ruleId, server, player.getName().getString());
+            case "FORCE_RULE_PRIMARY" -> RuntimeAdminService.forceSpawnPrimary(zoneId, ruleId, server, player.getName().getString());
+            case "FORCE_RULE_COMPANIONS" -> RuntimeAdminService.forceSpawnCompanions(zoneId, ruleId, server, player, player.getName().getString());
+            case "RESET_RULE_COOLDOWN" -> RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, player.getName().getString());
+            case "KILL_MANAGED" -> RuntimeAdminService.killManagedMobs(zoneId, ruleId, server, player.getName().getString());
+            case "CLEAR_RULE_STATE" -> RuntimeAdminService.clearRuleState(zoneId, ruleId, player.getName().getString());
+            default -> new ActionResultDto(false, "Unknown rule action: " + actionCode);
+        };
     }
 
     private static RuntimeSnapshotDto createSnapshot(MinecraftServer server) {
@@ -129,6 +227,15 @@ public class GerbariumRuntimeServerNetworking {
             z.dimension = zone.dimension;
             z.boundaryControlEnabled = RuntimeConfigStorage.getConfig().boundaryControlEnabled;
             z.boundaryScanPadding = RuntimeConfigStorage.getConfig().boundaryScanPadding;
+            z.activationRange = zone.activation.range;
+            z.deactivateAfterSeconds = zone.activation.deactivateAfterSeconds;
+            z.firstSpawnDelaySeconds = zone.activation.firstSpawnDelaySeconds;
+            z.reactivationCooldownSeconds = zone.activation.reactivationCooldownSeconds;
+            z.spawnMinDistanceFromPlayer = zone.spawn.minDistanceFromPlayer;
+            z.spawnMaxDistanceFromPlayer = zone.spawn.maxDistanceFromPlayer;
+            z.spawnMaxPositionAttempts = zone.spawn.maxPositionAttempts;
+            z.spawnRequireLoadedChunk = zone.spawn.requireLoadedChunk;
+            z.spawnRespectVanillaSpawnRules = zone.spawn.respectVanillaSpawnRules;
             
             ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
             z.active = zState.active;
@@ -206,7 +313,11 @@ public class GerbariumRuntimeServerNetworking {
                 rs.entity = rule.entity;
                 rs.spawnType = rule.spawnType == null ? null : rule.spawnType.name();
                 rs.maxAlive = rule.maxAlive;
-                rs.aliveCount = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
+                rs.normalPrimaryAlive = MobTracker.getNormalPrimaryAliveCount(zone.id, rule.id);
+                rs.forcedPrimaryAlive = MobTracker.getForcedPrimaryAliveCount(zone.id, rule.id);
+                rs.normalCompanionAlive = MobTracker.getNormalCompanionAliveCount(zone.id, rule.id);
+                rs.forcedCompanionAlive = MobTracker.getForcedCompanionAliveCount(zone.id, rule.id);
+                rs.aliveCount = rs.normalPrimaryAlive;
                 rs.enabled = rule.enabled;
                 
                 rs.refillMode = rule.refillMode == null ? null : rule.refillMode.name();
@@ -261,7 +372,7 @@ public class GerbariumRuntimeServerNetworking {
                     rs.boundaryLastHint = ruleState.boundaryLastHint;
                 }
 
-                rs.knownAlive = rs.aliveCount + rs.encounterCompanionsAlive;
+                rs.knownAlive = rs.normalPrimaryAlive + rs.forcedPrimaryAlive + rs.normalCompanionAlive + rs.forcedCompanionAlive;
                 rs.currentStatus = computeRuleCurrentStatus(server, zone, zState, zf, rule, rs);
                 rs.statusText = rs.currentStatus;
                 rs.nextActionText = computeRuleNextAction(server, zone, zState, zf, rule, rs);
@@ -284,6 +395,36 @@ public class GerbariumRuntimeServerNetworking {
         dto.recentEventsCount = allEvents.size();
 
         return dto;
+    }
+
+    private static RuntimeEventsDto createEvents(MinecraftServer server, String zoneId, String ruleId) {
+        RuntimeEventsDto dto = new RuntimeEventsDto();
+        dto.zoneId = zoneId == null ? "" : zoneId;
+        dto.ruleId = ruleId == null ? "" : ruleId;
+
+        RuntimeSnapshotDto snapshot = createSnapshot(server);
+        for (RuntimeEventDto event : snapshot.recentEvents) {
+            if (zoneId != null && !zoneId.isBlank() && !zoneId.equals(event.zoneId)) continue;
+            if (ruleId != null && !ruleId.isBlank() && !ruleId.equals(event.ruleId)) continue;
+            dto.events.add(event);
+        }
+        return dto;
+    }
+
+    private static ZoneSummaryDto findZone(RuntimeSnapshotDto snapshot, String zoneId) {
+        if (snapshot == null || snapshot.zones == null) return null;
+        for (ZoneSummaryDto zone : snapshot.zones) {
+            if (zone.id.equals(zoneId)) return zone;
+        }
+        return null;
+    }
+
+    private static RuleSummaryDto findRule(ZoneSummaryDto zone, String ruleId) {
+        if (zone == null || zone.rules == null) return null;
+        for (RuleSummaryDto rule : zone.rules) {
+            if (rule.id.equals(ruleId)) return rule;
+        }
+        return null;
     }
 
     private static String computeZoneCurrentStatus(MinecraftServer server, Zone zone, ZoneRuntimeState zState, ZoneStateFile zf) {
@@ -331,6 +472,7 @@ public class GerbariumRuntimeServerNetworking {
         String entityStatus = RuntimeRuleValidationUtil.getEntityStatus(rule);
         if (entityStatus != null) return entityStatus;
         if (!zState.active) return "INACTIVE";
+        if (!zState.firstSpawnDelayPassed) return "PENDING_FIRST_SPAWN_DELAY";
         if (rule.spawnType == SpawnType.UNIQUE && rs.encounterActive) {
             if (rs.aliveCount > 0) return "ALIVE";
             if (rs.encounterCompanionsAlive > 0) return "WAITING_FOR_COMPANIONS_CLEAR";
@@ -341,7 +483,8 @@ public class GerbariumRuntimeServerNetworking {
             if (rs.nextTimedSpawnInMillis > 0) return "TIMED_WAIT";
         }
         if (rs.nextAvailableAt > System.currentTimeMillis()) return "COOLDOWN";
-        if (rule.spawnType == SpawnType.PACK && rs.lastOnActivationAttemptActivationId == zState.activationId) return "ALREADY_ATTEMPTED_THIS_ACTIVATION";
+        if (rs.aliveCount >= rule.maxAlive) return "BLOCKED_MAX_ALIVE";
+        if (rule.spawnType == SpawnType.PACK && rule.refillMode == RefillMode.ON_ACTIVATION && rs.lastOnActivationAttemptActivationId == zState.activationId) return "ALREADY_ATTEMPTED_THIS_ACTIVATION";
         return "READY";
     }
 
@@ -363,10 +506,12 @@ public class GerbariumRuntimeServerNetworking {
         if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) return "Fix rule config before spawning.";
         if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) return "Fix entity id before spawning.";
         if (!zState.active) return "Wait for zone activation.";
+        if (!zState.firstSpawnDelayPassed) return "Wait for first spawn delay.";
         if (rule.refillMode == RefillMode.TIMED) {
             if (rs.timedBudgetExhausted) return "Budget exhausted until reactivation cooldown passes.";
             if (rs.nextTimedSpawnInMillis > 0) return "Next timed spawn in " + TimeUtil.formatDuration(rs.nextTimedSpawnInMillis);
         }
+        if (rs.aliveCount >= rule.maxAlive) return "Waiting for primary count below maxAlive.";
         if (rs.nextAvailableAt > System.currentTimeMillis()) return "Next available " + TimeUtil.formatRelative(rs.nextAvailableAt);
         return "Ready to spawn.";
     }
@@ -375,9 +520,10 @@ public class GerbariumRuntimeServerNetworking {
         if (!rule.enabled) return "Rule disabled.";
         if (RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty()) return "Zone world unavailable.";
         if (rule.spawnType == null) return "Invalid spawn type.";
+        if (rs.forcedPrimaryAlive > 0 || rs.forcedCompanionAlive > 0) return "Forced mobs are alive; normal maxAlive ignores them, but they still exist physically.";
         if (rule.spawnType == SpawnType.UNIQUE && rule.maxAlive > 1) return "Unique rules usually use maxAlive = 1.";
         if (rule.refillMode == RefillMode.TIMED && rule.timedMaxSpawnsPerActivation != null && rule.timedMaxSpawnsPerActivation == -1) return "Unlimited timed budget can create farm risk.";
-        if (rule.spawnType == SpawnType.PACK && rs.lastOnActivationAttemptActivationId == zState.activationId) return "Already attempted this activation.";
+        if (rule.spawnType == SpawnType.PACK && rule.refillMode == RefillMode.ON_ACTIVATION && rs.lastOnActivationAttemptActivationId == zState.activationId) return "Already attempted this activation.";
         String boundaryIntervalWarning = RuntimeRuleValidationUtil.getBoundaryIntervalWarning(rule);
         if (boundaryIntervalWarning != null) return boundaryIntervalWarning;
         return "";
@@ -387,6 +533,8 @@ public class GerbariumRuntimeServerNetworking {
         if (!zState.active) return "Zone inactive.";
         if (RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty()) return "Load the target world.";
         if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) return "Fix invalid entity id.";
+        if (!zState.firstSpawnDelayPassed) return "First spawn delay pending.";
+        if ("FAILED_NO_POSITION".equals(rs.lastAttemptResult)) return "No valid spawn position found. Check zone size, Y range, loaded chunks, and minDistanceFromPlayer.";
         if (rule.spawnType == SpawnType.UNIQUE && rs.encounterCompanionsAlive > 0 && rs.encounterPrimaryAlive == 0) return "Waiting for companions to clear before cooldown starts.";
         if (rule.refillMode == RefillMode.TIMED && rs.timedBudgetExhausted) return "Leave and re-enter after reactivation cooldown to refresh budget.";
         return "";

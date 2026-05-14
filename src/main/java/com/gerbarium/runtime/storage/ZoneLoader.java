@@ -168,7 +168,7 @@ public class ZoneLoader {
         MobRulesFile mobsFile;
         try (FileReader reader = new FileReader(mobsJson)) {
             mobsFile = GSON.fromJson(reader, MobRulesFile.class);
-        } catch (IOException e) {
+        } catch (Exception e) {
             GerbariumRegionsRuntime.LOGGER.error(
                     "Error reading mobs.json for folder " + folderName + ", using empty mob rules.", e);
             zone.spawn = new ZoneSpawnSettings();
@@ -185,8 +185,8 @@ public class ZoneLoader {
         }
 
         // Validate mobs.json zoneId matches
-        if (mobsFile.zoneId != null && !folderName.equals(mobsFile.zoneId)) {
-            GerbariumRegionsRuntime.LOGGER.warn(
+        if (mobsFile.zoneId == null || !folderName.equals(mobsFile.zoneId)) {
+            GerbariumRegionsRuntime.LOGGER.error(
                     "mobs.json zoneId mismatch in folder " + folderName
                             + ": mobs.json zoneId is '" + mobsFile.zoneId + "', expected '" + folderName
                             + "'. Loading zone with empty mob rules.");

@@ -34,12 +34,15 @@ public class RuntimeConfigStorage {
                     if (config == null) {
                         config = new RuntimeConfig();
                     }
+                    normalizeConfig();
                 }
             } else {
+                normalizeConfig();
                 save();
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             GerbariumRegionsRuntime.LOGGER.error("Failed to load runtime config", e);
+            config = new RuntimeConfig();
         }
     }
 
@@ -58,5 +61,25 @@ public class RuntimeConfigStorage {
             } catch (IOException ignored) {
             }
         }
+    }
+
+    private static void normalizeConfig() {
+        RuntimeConfig defaults = new RuntimeConfig();
+        config.activationCheckIntervalTicks = positive(config.activationCheckIntervalTicks, defaults.activationCheckIntervalTicks);
+        config.spawnCheckIntervalTicks = positive(config.spawnCheckIntervalTicks, defaults.spawnCheckIntervalTicks);
+        config.resyncIntervalTicks = positive(config.resyncIntervalTicks, defaults.resyncIntervalTicks);
+        config.stateSaveIntervalTicks = positive(config.stateSaveIntervalTicks, defaults.stateSaveIntervalTicks);
+        config.maxSpawnsPerTickCycle = positive(config.maxSpawnsPerTickCycle, defaults.maxSpawnsPerTickCycle);
+        config.maxZonesProcessedPerSpawnTick = positive(config.maxZonesProcessedPerSpawnTick, defaults.maxZonesProcessedPerSpawnTick);
+        config.autoReloadCheckIntervalTicks = positive(config.autoReloadCheckIntervalTicks, defaults.autoReloadCheckIntervalTicks);
+        config.boundaryGlobalCheckIntervalTicks = positive(config.boundaryGlobalCheckIntervalTicks, defaults.boundaryGlobalCheckIntervalTicks);
+        config.boundaryScanPadding = Math.max(0, config.boundaryScanPadding);
+        if (config.boundaryMaxEntitiesPerTick <= 0) {
+            config.boundaryMaxEntitiesPerTick = defaults.boundaryMaxEntitiesPerTick;
+        }
+    }
+
+    private static int positive(int value, int fallback) {
+        return value > 0 ? value : fallback;
     }
 }

@@ -20,6 +20,22 @@ public final class RuntimeRuleValidationUtil {
             return "FAILED_INVALID_RULE_CONFIG";
         }
 
+        if (rule.spawnType == SpawnType.UNIQUE && rule.refillMode == RefillMode.TIMED) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
+        if (rule.spawnType == SpawnType.UNIQUE && rule.refillMode == RefillMode.ON_ACTIVATION) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
+        if (rule.spawnType == SpawnType.PACK && rule.refillMode == RefillMode.AFTER_DEATH) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
+        if (rule.maxAlive <= 0 || rule.spawnCount <= 0 || rule.respawnSeconds < 0 || rule.chance < 0.0D || rule.chance > 1.0D) {
+            return "FAILED_INVALID_RULE_CONFIG";
+        }
+
         if (getBoundaryMode(rule) == null) {
             return "FAILED_INVALID_BOUNDARY_MODE";
         }
