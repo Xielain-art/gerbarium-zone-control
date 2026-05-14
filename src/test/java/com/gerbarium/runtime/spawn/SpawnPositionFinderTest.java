@@ -12,4 +12,11 @@ class SpawnPositionFinderTest {
         assertFalse(SpawnMathUtil.isInsideZoneXZ(11, 5, 10, 0, 10, 0));
         assertFalse(SpawnMathUtil.isInsideZoneXZ(5, -1, 10, 0, 10, 0));
     }
+
+    @Test
+    void airOnlyGroundModeAllowsAirBelowSpawnPoint() {
+        assertFalse(SpawnGroundUtil.isValidSpawnGround(false, false));
+        assertTrue(SpawnGroundUtil.isValidSpawnGround(false, true));
+        assertTrue(SpawnGroundUtil.isValidSpawnGround(true, false));
+    }
 }

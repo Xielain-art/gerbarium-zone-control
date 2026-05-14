@@ -236,6 +236,7 @@ public class GerbariumRuntimeServerNetworking {
             z.spawnMaxPositionAttempts = zone.spawn.maxPositionAttempts;
             z.spawnRequireLoadedChunk = zone.spawn.requireLoadedChunk;
             z.spawnRespectVanillaSpawnRules = zone.spawn.respectVanillaSpawnRules;
+            z.spawnAllowNonSolidGround = zone.spawn.allowNonSolidGround;
             
             ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zone.id);
             z.active = zState.active;
@@ -534,7 +535,7 @@ public class GerbariumRuntimeServerNetworking {
         if (RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty()) return "Load the target world.";
         if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) return "Fix invalid entity id.";
         if (!zState.firstSpawnDelayPassed) return "First spawn delay pending.";
-        if ("FAILED_NO_POSITION".equals(rs.lastAttemptResult)) return "No valid spawn position found. Check zone size, Y range, loaded chunks, and minDistanceFromPlayer.";
+        if ("FAILED_NO_POSITION".equals(rs.lastAttemptResult)) return "No valid spawn position found. Check zone size, Y range, loaded chunks, minDistanceFromPlayer, and ground mode.";
         if (rule.spawnType == SpawnType.UNIQUE && rs.encounterCompanionsAlive > 0 && rs.encounterPrimaryAlive == 0) return "Waiting for companions to clear before cooldown starts.";
         if (rule.refillMode == RefillMode.TIMED && rs.timedBudgetExhausted) return "Leave and re-enter after reactivation cooldown to refresh budget.";
         return "";

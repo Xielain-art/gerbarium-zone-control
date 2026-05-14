@@ -6,4 +6,5 @@ public class ZoneSpawnSettings {
     public int maxPositionAttempts = 12;
     public boolean requireLoadedChunk = true;
     public boolean respectVanillaSpawnRules = true;
+    public boolean allowNonSolidGround = false;
 }

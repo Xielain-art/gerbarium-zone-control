@@ -19,6 +19,7 @@ public class ZoneSummaryDto {
     public int spawnMaxPositionAttempts;
     public boolean spawnRequireLoadedChunk;
     public boolean spawnRespectVanillaSpawnRules;
+    public boolean spawnAllowNonSolidGround;
     public boolean active;
     public boolean pendingActivation;
     public int nearbyPlayers;

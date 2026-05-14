@@ -32,8 +32,8 @@ public class SpawnPositionFinder {
         List<ServerPlayerEntity> players = nearbyPlayers == null ? List.of() : nearbyPlayers;
 
         if (players.isEmpty()) {
-            Optional<BlockPos> center = scanColumn(world, zone, type.get(), (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2);
-            return center.or(() -> findRandomInside(world, zone, type.get(), Math.max(24, zone.spawn.maxPositionAttempts)));
+            Optional<BlockPos> center = scanColumn(world, zone, type.get(), (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2, zone.spawn.allowNonSolidGround);
+            return center.or(() -> findRandomInside(world, zone, type.get(), Math.max(24, zone.spawn.maxPositionAttempts), zone.spawn.allowNonSolidGround));
         }
 
         ServerPlayerEntity targetPlayer = players.get(RANDOM.nextInt(players.size()));
@@ -50,7 +50,7 @@ public class SpawnPositionFinder {
 
             if (!isDistanceAllowed(x, z, players, minDistance, maxDistance)) continue;
 
-            Optional<BlockPos> pos = scanColumn(world, zone, type.get(), x, z);
+            Optional<BlockPos> pos = scanColumn(world, zone, type.get(), x, z, zone.spawn.allowNonSolidGround);
             if (pos.isPresent()) return pos;
         }
 
@@ -64,17 +64,17 @@ public class SpawnPositionFinder {
         if (!players.isEmpty()) {
             ServerPlayerEntity player = players.get(RANDOM.nextInt(players.size()));
             Optional<BlockPos> aroundPlayer = findSafeInsidePosition(world, zone, type, player.getBlockX(), player.getBlockZ(),
-                    Math.max(4, zone.spawn.minDistanceFromPlayer), Math.max(8, zone.spawn.maxDistanceFromPlayer));
+                    Math.max(4, zone.spawn.minDistanceFromPlayer), Math.max(8, zone.spawn.maxDistanceFromPlayer), zone.spawn.allowNonSolidGround);
             if (aroundPlayer.isPresent()) return aroundPlayer;
         }
 
         Optional<BlockPos> aroundEntity = findSafeInsidePosition(world, zone, type,
                 entity == null ? (zone.getMinX() + zone.getMaxX()) / 2 : entity.getBlockX(),
                 entity == null ? (zone.getMinZ() + zone.getMaxZ()) / 2 : entity.getBlockZ(),
-                0, Math.max(8, Math.min(zone.getMaxX() - zone.getMinX(), zone.getMaxZ() - zone.getMinZ())));
+                0, Math.max(8, Math.min(zone.getMaxX() - zone.getMinX(), zone.getMaxZ() - zone.getMinZ())), zone.spawn.allowNonSolidGround);
         if (aroundEntity.isPresent()) return aroundEntity;
 
-        return scanColumn(world, zone, type, (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2);
+        return scanColumn(world, zone, type, (zone.getMinX() + zone.getMaxX()) / 2, (zone.getMinZ() + zone.getMaxZ()) / 2, zone.spawn.allowNonSolidGround);
     }
 
     public static Optional<BlockPos> findCompanionPosition(ServerWorld world, Zone zone, EntityType<?> type, BlockPos center, int radius) {
@@ -89,45 +89,45 @@ public class SpawnPositionFinder {
             int endY = Math.max(zone.getMinY(), center.getY() - 3);
             for (int y = startY; y >= endY; y--) {
                 BlockPos pos = new BlockPos(x, y, z);
-                if (isSafeSpawnPosition(world, type, pos, false)) return Optional.of(pos);
+                if (isSafeSpawnPosition(world, type, pos, false, zone.spawn.allowNonSolidGround)) return Optional.of(pos);
             }
         }
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> findSafeInsidePosition(ServerWorld world, Zone zone, EntityType<?> type, int centerX, int centerZ, int minDistance, int maxDistance) {
+    private static Optional<BlockPos> findSafeInsidePosition(ServerWorld world, Zone zone, EntityType<?> type, int centerX, int centerZ, int minDistance, int maxDistance, boolean allowNonSolidGround) {
         int attempts = Math.max(12, (maxDistance - minDistance + 1) * 2);
         for (int i = 0; i < attempts; i++) {
             double angle = RANDOM.nextDouble() * Math.PI * 2;
             double distance = minDistance + RANDOM.nextDouble() * Math.max(1, maxDistance - minDistance + 1);
             int x = MathHelper.clamp(centerX + (int) (Math.cos(angle) * distance), zone.getMinX(), zone.getMaxX());
             int z = MathHelper.clamp(centerZ + (int) (Math.sin(angle) * distance), zone.getMinZ(), zone.getMaxZ());
-            Optional<BlockPos> pos = scanColumn(world, zone, type, x, z);
+            Optional<BlockPos> pos = scanColumn(world, zone, type, x, z, allowNonSolidGround);
             if (pos.isPresent()) return pos;
         }
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> findRandomInside(ServerWorld world, Zone zone, EntityType<?> type, int attempts) {
+    private static Optional<BlockPos> findRandomInside(ServerWorld world, Zone zone, EntityType<?> type, int attempts, boolean allowNonSolidGround) {
         for (int i = 0; i < attempts; i++) {
-            Optional<BlockPos> pos = scanColumn(world, zone, type, randomBetween(zone.getMinX(), zone.getMaxX()), randomBetween(zone.getMinZ(), zone.getMaxZ()));
+            Optional<BlockPos> pos = scanColumn(world, zone, type, randomBetween(zone.getMinX(), zone.getMaxX()), randomBetween(zone.getMinZ(), zone.getMaxZ()), allowNonSolidGround);
             if (pos.isPresent()) return pos;
         }
         return Optional.empty();
     }
 
-    private static Optional<BlockPos> scanColumn(ServerWorld world, Zone zone, EntityType<?> type, int x, int z) {
+    private static Optional<BlockPos> scanColumn(ServerWorld world, Zone zone, EntityType<?> type, int x, int z, boolean allowNonSolidGround) {
         if (!SpawnMathUtil.isInsideZoneXZ(x, z, zone.getMinX(), zone.getMaxX(), zone.getMinZ(), zone.getMaxZ())) return Optional.empty();
         if (zone.spawn.requireLoadedChunk && !world.isChunkLoaded(x >> 4, z >> 4)) return Optional.empty();
 
         for (int y = zone.getMaxY(); y >= zone.getMinY(); y--) {
             BlockPos pos = new BlockPos(x, y, z);
-            if (isSafeSpawnPosition(world, type, pos, zone.spawn.respectVanillaSpawnRules)) return Optional.of(pos);
+            if (isSafeSpawnPosition(world, type, pos, zone.spawn.respectVanillaSpawnRules, allowNonSolidGround)) return Optional.of(pos);
         }
         return Optional.empty();
     }
 
-    private static boolean isSafeSpawnPosition(ServerWorld world, EntityType<?> type, BlockPos pos, boolean respectVanillaRules) {
+    private static boolean isSafeSpawnPosition(ServerWorld world, EntityType<?> type, BlockPos pos, boolean respectVanillaRules, boolean allowNonSolidGround) {
         if (!world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) return false;
 
         BlockState feet = world.getBlockState(pos);
@@ -137,7 +137,7 @@ public class SpawnPositionFinder {
         if (!head.isAir()) return false;
 
         BlockState below = world.getBlockState(pos.down());
-        if (!below.isSolidBlock(world, pos.down())) return false;
+        if (!SpawnGroundUtil.isValidSpawnGround(below.isSolidBlock(world, pos.down()), allowNonSolidGround)) return false;
 
         if (type != null) {
             EntityDimensions dimensions = type.getDimensions();

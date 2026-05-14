@@ -89,15 +89,16 @@ public class RuntimeAdminService {
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         if (!zState.active) return new ActionResultDto(true, "Zone is already inactive");
 
-        zState.active = false;
-        zState.firstSpawnDelayPassed = false;
-
-        ZoneRuntimePersistentState pState = RuntimeStateStorage.getZoneState(zoneId).zone;
-        pState.lastDeactivatedAt = System.currentTimeMillis();
-        pState.lastDeactivationReason = "force_deactivate by " + adminName;
-
-        RuntimeStateStorage.addEvent(zoneId, null, "FORCE_DEACTIVATED", "Zone force deactivated by " + adminName);
-        RuntimeStateStorage.markDirty(zoneId);
+        long now = System.currentTimeMillis();
+        ZoneActivationManager.deactivateZone(
+                server,
+                zone,
+                zState,
+                now,
+                "force_deactivate by " + adminName,
+                "FORCE_DEACTIVATED",
+                "Zone force deactivated by " + adminName
+        );
 
         return new ActionResultDto(true, "Zone " + zoneId + " force deactivated");
     }

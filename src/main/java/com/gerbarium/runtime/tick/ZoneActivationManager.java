@@ -48,7 +48,7 @@ public class ZoneActivationManager {
 
             if (zState.active) {
                 if (now - zState.lastPlayerSeenAtMillis > zone.activation.deactivateAfterSeconds * 1000L) {
-                    deactivateZone(server, zone, zState, now);
+                    deactivateZone(server, zone, zState, now, "no_players_after_timeout", "ZONE_DEACTIVATED", "Zone deactivated (timeout)");
                 } else if (!zState.firstSpawnDelayPassed && now - zState.activatedAtMillis > zone.activation.firstSpawnDelaySeconds * 1000L) {
                     zState.firstSpawnDelayPassed = true;
                 }
@@ -69,43 +69,59 @@ public class ZoneActivationManager {
         RuntimeStateStorage.addEvent(zone.id, null, "ZONE_ACTIVATED", "Zone activated by player " + playerName);
     }
 
-    private static void deactivateZone(MinecraftServer server, Zone zone, ZoneRuntimeState zState, long now) {
+    public static void deactivateZone(MinecraftServer server, Zone zone, ZoneRuntimeState zState, long now,
+                                      String deactivationReason, String eventType, String eventMessage) {
+        ZoneRuntimePersistentState pState = RuntimeStateStorage.getZoneState(zone.id).zone;
+        applyDeactivationState(zone, zState, pState, now, deactivationReason, eventType, eventMessage);
+        RuntimeStateStorage.addEvent(zone.id, null, eventType, eventMessage);
+
+        boolean anyDespawned = despawnInactiveZoneMobs(server, zone);
+
+        resetRuleStateOnDeactivation(zone, anyDespawned);
+    }
+
+    static void applyDeactivationState(Zone zone, ZoneRuntimeState zState, ZoneRuntimePersistentState pState,
+                                       long now, String deactivationReason, String eventType, String eventMessage) {
         zState.active = false;
         zState.firstSpawnDelayPassed = false;
 
-        ZoneRuntimePersistentState pState = RuntimeStateStorage.getZoneState(zone.id).zone;
         if (pState != null) {
             pState.lastDeactivatedAt = now;
-            pState.lastDeactivationReason = "no_players_after_timeout";
+            pState.lastDeactivationReason = deactivationReason;
         }
 
-        // Handle despawnWhenZoneInactive
-        boolean anyDespawned = false;
-        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
-        if (world != null) {
-            Box box = zone.getZoneBox();
+    }
 
-            for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
-                var infoOpt = com.gerbarium.runtime.tracking.MobTagger.getInfo(entity);
-                if (infoOpt.isPresent()) {
-                    var info = infoOpt.get();
-                    if (info.zoneId.equals(zone.id)) {
-                        Optional<com.gerbarium.runtime.model.MobRule> rule = zone.mobs.stream().filter(m -> m.id.equals(info.ruleId)).findFirst();
-                        if (rule.isPresent() && rule.get().despawnWhenZoneInactive) {
-                            ((com.gerbarium.runtime.access.EntityPersistentDataHolder) entity).getPersistentData().putBoolean(com.gerbarium.runtime.tracking.MobTagger.TAG_CLEANUP, true);
-                            entity.discard();
-                            anyDespawned = true;
-                        }
-                    }
-                }
+    private static boolean despawnInactiveZoneMobs(MinecraftServer server, Zone zone) {
+        ServerWorld world = RuntimeWorldUtil.getWorld(server, zone.dimension).orElse(null);
+        if (world == null) {
+            return false;
+        }
+
+        Box box = zone.getZoneBox();
+        boolean anyDespawned = false;
+        for (net.minecraft.entity.Entity entity : world.getOtherEntities(null, box)) {
+            var infoOpt = com.gerbarium.runtime.tracking.MobTagger.getInfo(entity);
+            if (infoOpt.isEmpty()) continue;
+
+            var info = infoOpt.get();
+            if (!info.zoneId.equals(zone.id)) continue;
+
+            Optional<com.gerbarium.runtime.model.MobRule> rule = zone.mobs.stream().filter(m -> m.id.equals(info.ruleId)).findFirst();
+            if (rule.isPresent() && rule.get().despawnWhenZoneInactive) {
+                ((com.gerbarium.runtime.access.EntityPersistentDataHolder) entity).getPersistentData().putBoolean(com.gerbarium.runtime.tracking.MobTagger.TAG_CLEANUP, true);
+                entity.discard();
+                anyDespawned = true;
             }
         }
 
         if (anyDespawned) {
             com.gerbarium.runtime.tracking.MobTracker.resyncZone(server, zone);
         }
+        return anyDespawned;
+    }
 
-        // Always reset TIMED baseline when zone deactivates to avoid catch-up
+    private static void resetRuleStateOnDeactivation(Zone zone, boolean anyDespawned) {
         for (com.gerbarium.runtime.model.MobRule rule : zone.mobs) {
             com.gerbarium.runtime.state.RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
             TimedSpawnLogic.resetTimer(state);
@@ -114,8 +130,6 @@ public class ZoneActivationManager {
                 com.gerbarium.runtime.tracking.MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, false, true);
             }
         }
-
-        RuntimeStateStorage.addEvent(zone.id, null, "ZONE_DEACTIVATED", "Zone deactivated (timeout)");
     }
 
     private static List<ServerPlayerEntity> findNearbyPlayers(MinecraftServer server, Zone zone) {

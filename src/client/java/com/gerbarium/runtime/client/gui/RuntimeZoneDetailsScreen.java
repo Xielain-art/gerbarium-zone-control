@@ -142,6 +142,7 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Position attempts", String.valueOf(zone.spawnMaxPositionAttempts)));
         sec.child(RuntimeUi.kv("Require loaded chunk", RuntimeUi.boolText(zone.spawnRequireLoadedChunk)));
         sec.child(RuntimeUi.kv("Respect spawn rules", RuntimeUi.boolText(zone.spawnRespectVanillaSpawnRules)));
+        sec.child(RuntimeUi.kv("Allow non-solid ground", RuntimeUi.boolText(zone.spawnAllowNonSolidGround)));
         sec.child(RuntimeUi.kv("Bounds min", zone.minX + ", " + zone.minY + ", " + zone.minZ));
         sec.child(RuntimeUi.kv("Bounds max", zone.maxX + ", " + zone.maxY + ", " + zone.maxZ));
         sec.child(RuntimeUi.kv("State file exists", RuntimeUi.boolText(zone.stateFileExists)));

@@ -139,10 +139,8 @@ public class ZoneLoader {
             zone.activation = base.activation;
         }
 
-        // Warn about inverted bounds
-        if (zone.getMinX() > zone.getMaxX()
-                || zone.getMinY() > zone.getMaxY()
-                || zone.getMinZ() > zone.getMaxZ()) {
+        // Warn about inverted bounds before normalization.
+        if (ZoneBoundsUtil.hasInvertedBounds(base)) {
             GerbariumRegionsRuntime.LOGGER.warn(
                     "Zone " + zone.id + " has inverted min/max bounds. This may cause unexpected behavior.");
         }
