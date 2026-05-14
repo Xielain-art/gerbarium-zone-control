@@ -3,6 +3,7 @@ package com.gerbarium.runtime.command;
 import com.gerbarium.runtime.admin.ActionResultDto;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
 import com.gerbarium.runtime.admin.RuntimeQueryService;
+import com.gerbarium.runtime.api.RuntimeReloadApi;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.network.GerbariumRuntimePackets;
 import com.gerbarium.runtime.permission.PermissionUtil;
@@ -41,8 +42,8 @@ public class RuntimeCommands {
                 // Reload
                 .then(literal("reload")
                     .executes(context -> {
-                        ActionResultDto result = RuntimeAdminService.reload(context.getSource().getName());
-                        context.getSource().sendFeedback(() -> Text.literal(result.message + ": Loaded " + result.loadedZones + ", Enabled " + result.enabledZones), true);
+                        RuntimeReloadApi.reload();
+                        context.getSource().sendFeedback(() -> Text.literal("Reloaded zones runtime and synchronized resources runtime."), true);
                         return 1;
                     })
                 )
