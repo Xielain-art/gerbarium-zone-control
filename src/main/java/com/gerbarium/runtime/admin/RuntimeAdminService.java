@@ -18,6 +18,7 @@ import com.gerbarium.runtime.storage.RuntimeStateStorage;
 import com.gerbarium.runtime.storage.ZoneLoader;
 import com.gerbarium.runtime.storage.ZoneRepository;
 import com.gerbarium.runtime.tick.ZoneActivationManager;
+import com.gerbarium.runtime.tick.ZoneMobSpawner;
 import com.gerbarium.runtime.tracking.MobTagger;
 import com.gerbarium.runtime.tracking.MobTracker;
 import com.gerbarium.runtime.util.RuntimeRuleValidationUtil;
@@ -222,10 +223,13 @@ public class RuntimeAdminService {
         RuleRuntimeState state = RuntimeStateStorage.getRuleState(zoneId, ruleId);
         state.nextAvailableAt = 0;
         state.nextAttemptAt = 0;
+        state.nextAllowedAttemptTimeMillis = 0;
         state.lastOnActivationAttemptActivationId = 0;
         state.timedSpawnedThisActivation = 0;
         state.timedBudgetExhausted = false;
         state.encounterActive = false;
+        state.hasPendingAfterDeathRespawn = false;
+        state.pendingAfterDeathRespawnTimeMillis = 0;
 
         RuntimeStateStorage.markDirty(zoneId);
         RuntimeStateStorage.addEvent(zoneId, ruleId, "COOLDOWN_RESET", "Cooldown reset by " + adminName);
@@ -258,7 +262,9 @@ public class RuntimeAdminService {
 
         ZoneRuntimeState zState = ZoneActivationManager.getZoneState(zoneId);
         MobTracker.resyncZone(server, zone);
-        int alive = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
+
+        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
+        int alive = state.getCurrentAliveCount();
         if (alive >= rule.maxAlive) {
             return recordFailure(zoneId, ruleId, "max_alive", "Max alive reached: " + alive + "/" + rule.maxAlive);
         }
@@ -268,56 +274,41 @@ public class RuntimeAdminService {
         int toSpawn = Math.min(requested, rule.maxAlive - alive);
         if (toSpawn <= 0) return recordFailure(zoneId, ruleId, "max_alive", "Max alive reached");
 
-        int totalPrimary = 0;
-        int totalCompanions = 0;
         long now = System.currentTimeMillis();
-        RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
         state.totalAttempts++;
         state.lastAttemptAt = now;
-        int positionAttempts = Math.max(Math.max(512, RuntimeConfigStorage.getConfig().forceSpawnPositionAttempts), rule.positionAttempts);
-        SpawnPositionResult lastPositionResult = null;
-        List<BlockPos> selectedPositions = new ArrayList<>();
 
-        for (int i = 0; i < toSpawn; i++) {
-            SpawnPositionResult positionResult = SpawnPositionFinder.findSpawnPositionResult(world, zone, rule, zState.nearbyPlayers, positionAttempts, selectedPositions);
-            lastPositionResult = positionResult;
-            recordPositionResult(state, positionResult);
-            Optional<BlockPos> pos = positionResult.position();
-            if (pos.isPresent()) {
-                var primary = EntitySpawnService.spawnPrimary(world, zone, rule, pos.get(), SpawnContext.FORCED);
-                if (primary != null) {
-                    totalPrimary++;
-                    selectedPositions.add(pos.get());
-                    totalCompanions += EntitySpawnService.spawnCompanions(world, zone, rule, primary, SpawnContext.FORCED);
-                    GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn success: zone={} rule={} entity={} pos={},{},{}", zone.id, rule.id, rule.entity, pos.get().getX(), pos.get().getY(), pos.get().getZ());
-                }
-            }
-        }
+        ZoneMobSpawner.SpawnResult spawnResult = ZoneMobSpawner.spawnEntities(world, zone, rule, zState, state, now, SpawnContext.FORCED, toSpawn);
 
-        state.lastSuccessfulPrimaryCount = totalPrimary;
-        state.lastSuccessfulCompanionCount = totalCompanions;
-        state.knownAlive = MobTracker.getPrimaryAliveCount(zone.id, rule.id);
-        if (totalPrimary <= 0) {
+        state.lastSuccessfulPrimaryCount = spawnResult.spawned;
+        state.lastSuccessfulCompanionCount = spawnResult.companionsSpawned;
+        state.knownAlive = state.getCurrentAliveCount();
+
+        if (spawnResult.spawned <= 0) {
             state.lastAttemptResult = "FAILED_NO_POSITION";
-            state.lastAttemptReason = lastPositionResult == null ? "no_valid_position" : lastPositionResult.reason();
+            state.lastAttemptReason = spawnResult.failureReason;
             RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN_FAILED", state.lastAttemptReason + " by " + adminName);
             RuntimeStateStorage.markDirty(zoneId);
-            String summary = lastPositionResult == null ? "reason=no_valid_position attempts=" + positionAttempts : lastPositionResult.failureSummary();
-            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn failed: zone={} rule={} entity={} {}", zone.id, rule.id, rule.entity, summary);
-            return failed(state.lastAttemptReason, "Force spawn failed: " + state.lastAttemptReason + " " + (lastPositionResult == null ? "" : lastPositionResult.stats().format()));
+            GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn failed: zone={} rule={} entity={} reason={}",
+                    zone.id, rule.id, rule.entity, spawnResult.failureReason);
+            return failed(state.lastAttemptReason, "Force spawn failed: " + state.lastAttemptReason);
         }
 
         state.lastAttemptResult = "SUCCESS";
-        state.lastAttemptReason = "Force spawned " + totalPrimary + " primary mobs";
+        state.lastAttemptReason = "Force spawned " + spawnResult.spawned + " primary mobs";
         state.lastSuccessAt = now;
         state.totalSuccesses++;
-        state.totalPrimarySpawned += totalPrimary;
-        state.totalCompanionsSpawned += totalCompanions;
-        RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN", "Rule force spawn by " + adminName + ": " + totalPrimary + "P + " + totalCompanions + "C");
+        state.totalPrimarySpawned += spawnResult.spawned;
+        state.totalCompanionsSpawned += spawnResult.companionsSpawned;
+        RuntimeStateStorage.addEvent(zoneId, ruleId, "FORCE_SPAWN", "Rule force spawn by " + adminName + ": " + spawnResult.spawned + "P + " + spawnResult.companionsSpawned + "C");
         RuntimeStateStorage.markDirty(zoneId);
+
+        GerbariumRegionsRuntime.LOGGER.info("[GerbariumRuntime] Force spawn success: zone={} rule={} entity={} spawned={}",
+                zone.id, rule.id, rule.entity, spawnResult.spawned);
+
         ActionResultDto result = new ActionResultDto(true, "Force spawn success: zone=" + zoneId + " rule=" + ruleId + " entity=" + rule.entity);
-        result.primarySpawned = totalPrimary;
-        result.companionsSpawned = totalCompanions;
+        result.primarySpawned = spawnResult.spawned;
+        result.companionsSpawned = spawnResult.companionsSpawned;
         return result;
     }
 

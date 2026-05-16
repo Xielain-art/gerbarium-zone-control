@@ -97,6 +97,13 @@ final class RuntimeUi {
                 .sizing(Sizing.content(), Sizing.content());
     }
 
+    static Component button(String text, String tooltip, Runnable action) {
+        var btn = Components.button(Text.literal(text), b -> action.run())
+                .sizing(Sizing.content(), Sizing.content());
+        btn.tooltip(Text.literal(tooltip));
+        return btn;
+    }
+
     static Component chip(String label, String value, int color) {
         return Components.label(Text.literal(label + ": " + value)).color(Color.ofRgb(color));
     }

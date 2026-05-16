@@ -6,6 +6,7 @@ import com.gerbarium.runtime.client.dto.ZoneSummaryDto;
 import com.gerbarium.runtime.network.GerbariumRuntimePackets;
 import com.gerbarium.runtime.util.TimeUtil;
 import io.wispforest.owo.ui.base.BaseOwoScreen;
+import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
 import io.wispforest.owo.ui.core.*;
@@ -165,40 +166,63 @@ public class RuntimeZoneDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
 
     private FlowLayout buildRuleCard(RuleSummaryDto rule) {
         FlowLayout card = RuntimeUi.card();
+
+        // Header with status color
         FlowLayout header = RuntimeUi.row();
         header.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
-        header.child(RuntimeUi.label(RuntimeUi.valueOrDash(rule.name != null && !rule.name.isBlank() ? rule.name : rule.id), RuntimeUi.COLOR_TEXT));
+        header.child(statusDot(rule));
+        header.child(RuntimeUi.label(RuntimeUi.valueOrDash(rule.name != null && !rule.name.isBlank() ? rule.name : rule.id), RuntimeUi.COLOR_TEXT).margins(Insets.left(RuntimeUi.GAP_TINY)));
         header.child(RuntimeUi.label(" [" + RuntimeUi.valueOrDash(rule.currentStatus) + "]", statusColor(rule)).margins(Insets.left(RuntimeUi.GAP_TINY)));
         header.child(RuntimeUi.label(rule.enabled ? " ENABLED" : " DISABLED", rule.enabled ? RuntimeUi.COLOR_OK_LIGHT : RuntimeUi.COLOR_WARN).margins(Insets.left(RuntimeUi.GAP_TINY)));
         card.child(header);
 
+        // Meta info row
         FlowLayout meta = RuntimeUi.row();
         meta.child(RuntimeUi.label("Entity: " + RuntimeUi.valueOrDash(rule.entity), RuntimeUi.COLOR_SUBTLE));
-        meta.child(RuntimeUi.label("Type: " + RuntimeUi.valueOrDash(rule.spawnType), RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        meta.child(RuntimeUi.label("Trigger: " + RuntimeUi.valueOrDash(rule.spawnTrigger), RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         meta.child(RuntimeUi.label("Alive: " + rule.aliveCount + "/" + rule.maxAlive, RuntimeUi.COLOR_OK_LIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+
+        // Show countdown if applicable
+        long now = System.currentTimeMillis();
+        if (rule.nextAllowedAttemptTimeMillis > now) {
+            long remainingSeconds = (rule.nextAllowedAttemptTimeMillis - now) / 1000L;
+            meta.child(RuntimeUi.label("Next: " + remainingSeconds + "s", RuntimeUi.COLOR_HIGHLIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        } else if (rule.hasPendingAfterDeathRespawn && rule.pendingAfterDeathRespawnTimeMillis > now) {
+            long remainingSeconds = (rule.pendingAfterDeathRespawnTimeMillis - now) / 1000L;
+            meta.child(RuntimeUi.label("Respawn: " + remainingSeconds + "s", RuntimeUi.COLOR_HIGHLIGHT).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        }
         card.child(meta.margins(Insets.top(RuntimeUi.GAP_TINY)));
 
         if (rule.warningText != null && !rule.warningText.isBlank()) {
             card.child(RuntimeUi.warn(rule.warningText).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }
 
+        // Grouped buttons
         FlowLayout btns = RuntimeUi.row();
-        btns.child(RuntimeUi.button("Details", () -> client.setScreen(new RuntimeRuleDetailsScreen(this, rule))));
-        btns.child(RuntimeUi.button("History", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, rule.id))).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        btns.child(RuntimeUi.button("Spawn", () -> confirm("Force Spawn", "Force spawn rule " + rule.id + "?", "FORCE_RULE_SPAWN:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        btns.child(RuntimeUi.button("Primary", () -> confirm("Force Primary", "Spawn primary for rule " + rule.id + "?", "FORCE_RULE_PRIMARY:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        btns.child(RuntimeUi.button("Companions", () -> confirm("Force Companions", "Spawn companions for rule " + rule.id + "?", "FORCE_RULE_COMPANIONS:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btns.child(RuntimeUi.button("Details", "Open full rule diagnostics", () -> client.setScreen(new RuntimeRuleDetailsScreen(this, rule))));
+        btns.child(RuntimeUi.button("History", "View event history", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, rule.id))).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btns.child(RuntimeUi.button("Spawn", "Force spawn primary + companions", () -> confirm("Force Spawn", "Force spawn rule " + rule.id + "?", "FORCE_RULE_SPAWN:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btns.child(RuntimeUi.button("Reset", "Reset timer/cooldown", () -> confirm("Reset Timer", "Reset timer for rule " + rule.id + "?", "RESET_RULE_TIMER:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        btns.child(RuntimeUi.button("Kill", "Remove tracked mobs", () -> confirm("Kill Managed", "Discard managed mobs for rule " + rule.id + "?", "KILL_MANAGED:" + rule.zoneId + ":" + rule.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
         card.child(btns.margins(Insets.top(RuntimeUi.GAP_ITEM)));
         return card;
+    }
+
+    private Component statusDot(RuleSummaryDto rule) {
+        int color = statusColor(rule);
+        return Components.label(Text.literal("\u25CF")).color(Color.ofRgb(color));
     }
 
     private int statusColor(RuleSummaryDto rule) {
         if (!rule.enabled) return RuntimeUi.COLOR_WARN;
         if (rule.warningText != null && !rule.warningText.isBlank()) return RuntimeUi.COLOR_HIGHLIGHT;
-        return switch (RuntimeUi.valueOrDash(rule.currentStatus)) {
+        String status = RuntimeUi.valueOrDash(rule.currentStatus);
+        return switch (status) {
             case "READY" -> RuntimeUi.COLOR_OK_LIGHT;
-            case "INACTIVE", "DISABLED" -> RuntimeUi.COLOR_SUBTLE;
-            case "COOLDOWN", "TIMED_WAIT", "WAITING_FOR_COMPANIONS_CLEAR" -> RuntimeUi.COLOR_HIGHLIGHT;
+            case "INACTIVE", "DISABLED", "MANUAL_ONLY" -> RuntimeUi.COLOR_SUBTLE;
+            case "COOLDOWN", "TIMED_WAIT", "WAITING_FOR_COMPANIONS_CLEAR", "PENDING_AFTER_DEATH_RESPAWN" -> RuntimeUi.COLOR_HIGHLIGHT;
+            case "BLOCKED_MAX_ALIVE", "PENDING_FIRST_SPAWN_DELAY" -> RuntimeUi.COLOR_DIM;
+            case "ALIVE", "ENCOUNTER_ACTIVE" -> RuntimeUi.COLOR_OK;
             default -> RuntimeUi.COLOR_DIM;
         };
     }

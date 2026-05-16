@@ -45,6 +45,11 @@ public class RuntimeTickHandler {
             MobTracker.resyncActiveZones(server);
         }
 
+        // Stale UUID cleanup every 30 seconds (600 ticks)
+        if (tickCounter % 600 == 0) {
+            MobTracker.cleanupStaleUuids(server);
+        }
+
         if (tickCounter % config.stateSaveIntervalTicks == 0) {
             RuntimeStateStorage.saveIfDirty();
         }

@@ -125,7 +125,9 @@ public class ZoneActivationManager {
     private static void resetRuleStateOnDeactivation(Zone zone, boolean anyDespawned) {
         for (com.gerbarium.runtime.model.MobRule rule : zone.mobs) {
             com.gerbarium.runtime.state.RuleRuntimeState state = RuntimeStateStorage.getRuleState(zone.id, rule.id);
-            TimedSpawnLogic.resetTimer(state);
+            // Reset legacy timer fields (TimedSpawnLogic is dead code, but fields may still exist in state)
+            state.lastTimedTickAt = 0;
+            state.nextTimedSpawnInMillis = 0;
 
             if (anyDespawned && rule.spawnType == com.gerbarium.runtime.model.SpawnType.UNIQUE) {
                 com.gerbarium.runtime.tracking.MobTracker.checkUniqueEncounterCleared(zone.id, rule.id, false, true);

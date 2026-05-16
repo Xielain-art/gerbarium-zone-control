@@ -52,6 +52,7 @@ public class EntitySpawnService {
         MobTagger.tagPrimary(entity, zone.id, rule.id, context == SpawnContext.FORCED);
         if (world.spawnEntity(entity)) {
             MobTracker.incrementPrimary(zone.id, rule.id, context == SpawnContext.FORCED);
+            MobTracker.trackEntity(entity, zone.id, rule.id, "PRIMARY", context == SpawnContext.FORCED);
             GerbariumRegionsRuntime.LOGGER.debug(
                     "Spawned primary mob zone={} rule={} role=PRIMARY forced={} uuid={} pos={}",
                     zone.id, rule.id, context == SpawnContext.FORCED, entity.getUuid(), pos
@@ -118,6 +119,7 @@ public class EntitySpawnService {
                 MobTagger.tagCompanion(entity, zone.id, parentRule.id, companion.id, context == SpawnContext.FORCED);
                 if (world.spawnEntity(entity)) {
                     MobTracker.incrementCompanion(zone.id, parentRule.id, context == SpawnContext.FORCED);
+                    MobTracker.trackEntity(entity, zone.id, parentRule.id, "COMPANION", context == SpawnContext.FORCED);
                     GerbariumRegionsRuntime.LOGGER.debug(
                             "Spawned companion mob zone={} rule={} companion={} forced={} uuid={} pos={}",
                             zone.id, parentRule.id, companion.id, context == SpawnContext.FORCED, entity.getUuid(), pos

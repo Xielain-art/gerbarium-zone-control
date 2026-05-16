@@ -1,8 +1,15 @@
 package com.gerbarium.runtime.state;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 public class RuleRuntimeState {
     public String zoneId;
     public String ruleId;
+
+    // UUID-based alive tracking
+    public Set<UUID> aliveEntityUuids = new HashSet<>();
 
     public boolean encounterActive;
     public long encounterStartedAt;
@@ -27,14 +34,21 @@ public class RuleRuntimeState {
     public int lastSuccessfulCompanionCount;
 
     public long lastDeathAt;
+    public int deathCount;
     public long lastBoundaryActionAt;
     public String lastBoundaryActionType = "";
     public int boundaryOutsideCount;
     public long boundaryLastScanAt;
     public String boundaryLastHint = "";
 
+    // Unified timer fields
+    public long nextAllowedAttemptTimeMillis;
     public long nextAttemptAt;
     public long nextAvailableAt;
+
+    // After-death respawn
+    public boolean hasPendingAfterDeathRespawn;
+    public long pendingAfterDeathRespawnTimeMillis;
 
     public long timedProgressMillis;
     public long lastTimedTickAt;
@@ -50,4 +64,8 @@ public class RuleRuntimeState {
     public long totalSuccesses;
     public long totalPrimarySpawned;
     public long totalCompanionsSpawned;
+
+    public int getCurrentAliveCount() {
+        return aliveEntityUuids != null ? aliveEntityUuids.size() : 0;
+    }
 }

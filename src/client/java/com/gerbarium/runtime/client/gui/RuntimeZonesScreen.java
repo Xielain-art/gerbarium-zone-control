@@ -158,13 +158,12 @@ public class RuntimeZonesScreen extends BaseOwoScreen<FlowLayout> implements Run
 
     private FlowLayout zoneActions(ZoneSummaryDto zone) {
         FlowLayout row = RuntimeUi.row();
-        row.child(RuntimeUi.button("Details", () -> MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot))));
-        row.child(RuntimeUi.button("Events", () -> MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot, zone.id, null))).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row.child(RuntimeUi.button("Activate", () -> openConfirm("Force Activate", "Force activate zone " + zone.id + "?", "FORCE_ACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row.child(RuntimeUi.button("Deactivate", () -> openConfirm("Force Deactivate", "Force deactivate zone " + zone.id + "?", "FORCE_DEACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row.child(RuntimeUi.button("Spawn", () -> openConfirm("Force Spawn", "Force spawn all rules in zone " + zone.id + "?", "FORCE_SPAWN:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row.child(RuntimeUi.button("Clear Mobs", () -> openConfirm("Clear Mobs", "Remove managed mobs in zone " + zone.id + "?", "CLEAR_ZONE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row.child(RuntimeUi.button("Clear State", () -> openConfirm("Clear State", "Delete runtime state for zone " + zone.id + "?", "CLEAR_ZONE_STATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Details", "View zone details and rules", () -> MinecraftClient.getInstance().setScreen(new RuntimeZoneDetailsScreen(this, zone, snapshot))));
+        row.child(RuntimeUi.button("Events", "View zone event history", () -> MinecraftClient.getInstance().setScreen(new RuntimeEventsScreen(this, snapshot, zone.id, null))).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Activate", "Force activate this zone", () -> openConfirm("Force Activate", "Force activate zone " + zone.id + "?", "FORCE_ACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Deactivate", "Force deactivate this zone", () -> openConfirm("Force Deactivate", "Force deactivate zone " + zone.id + "?", "FORCE_DEACTIVATE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Spawn", "Force spawn all rules in zone", () -> openConfirm("Force Spawn", "Force spawn all rules in zone " + zone.id + "?", "FORCE_SPAWN:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        row.child(RuntimeUi.button("Clear", "Remove managed mobs", () -> openConfirm("Clear Mobs", "Remove managed mobs in zone " + zone.id + "?", "CLEAR_ZONE:" + zone.id)).margins(Insets.left(RuntimeUi.GAP_TINY)));
         return row;
     }
 

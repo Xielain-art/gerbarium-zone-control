@@ -17,12 +17,14 @@ public class RuleSummaryDto {
 
     // Config Details
     public String refillMode;
+    public String spawnTrigger;
     public String boundaryMode;
     public int boundaryMaxOutsideSeconds;
     public int boundaryCheckIntervalTicks;
     public boolean boundaryTeleportBack;
     public int spawnCount;
     public int respawnSeconds;
+    public int retrySeconds;
     public double chance;
     public Integer timedMaxSpawnsPerActivation;
     public String cooldownStart;
@@ -30,6 +32,9 @@ public class RuleSummaryDto {
     public int failedSpawnRetrySeconds;
     public boolean despawnWhenZoneInactive;
     public boolean announceOnSpawn;
+    public boolean respawnAfterDeath;
+    public boolean respawnAfterDespawn;
+    public int afterDeathDelaySeconds;
     public String spawnMode;
     public Integer fixedX;
     public Integer fixedY;
@@ -38,6 +43,10 @@ public class RuleSummaryDto {
     public int positionAttempts;
     public int minDistanceBetweenSpawns;
     public boolean spreadSpawns;
+    public boolean requirePlayerNearby;
+    public int playerActivationRange;
+    public boolean requireChunkLoaded;
+    public boolean allowForceLoad;
     
     // Runtime State
     public int timedSpawnedThisActivation;
@@ -46,7 +55,7 @@ public class RuleSummaryDto {
     public boolean timedBudgetExhausted;
     public long lastTimedBudgetResetAt;
     public long lastOnActivationAttemptActivationId;
-    public long knownAlive;
+    public int knownAlive;
     public long lastActivationSpawnAt;
     public long lastAttemptAt;
     public String lastAttemptResult = "NONE";
@@ -57,7 +66,11 @@ public class RuleSummaryDto {
     public int lastSuccessfulCompanionCount;
     public long nextAvailableAt;
     public long nextAttemptAt;
+    public long nextAllowedAttemptTimeMillis;
     public long lastDeathAt;
+    public int deathCount;
+    public boolean hasPendingAfterDeathRespawn;
+    public long pendingAfterDeathRespawnTimeMillis;
     public long lastBoundaryActionAt;
     public String lastBoundaryActionType = "";
     public int boundaryOutsideCount;

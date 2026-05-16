@@ -193,22 +193,35 @@ public class RuntimeEventsScreen extends BaseOwoScreen<FlowLayout> implements Ru
     private FlowLayout buildEventCard(RuntimeEventDto event) {
         FlowLayout card = RuntimeUi.card();
 
+        // Top row: time, type badge, zone, rule
         FlowLayout top = RuntimeUi.row();
-        top.child(RuntimeUi.label(TimeUtil.formatRelative(event.time), RuntimeUi.COLOR_SUBTLE));
+        top.alignment(HorizontalAlignment.LEFT, VerticalAlignment.CENTER);
+        top.child(Components.label(Text.literal("\u25CF")).color(Color.ofRgb(typeColor(event.type))));
+        top.child(RuntimeUi.label(TimeUtil.formatRelative(event.time), RuntimeUi.COLOR_SUBTLE).margins(Insets.left(RuntimeUi.GAP_TINY)));
         top.child(RuntimeUi.label(RuntimeUi.valueOrDash(event.type), typeColor(event.type)).margins(Insets.left(RuntimeUi.GAP_ITEM)));
-        top.child(RuntimeUi.label(RuntimeUi.valueOrDash(event.zoneId), RuntimeUi.COLOR_ZONE_TAG).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        if (event.zoneId != null && !event.zoneId.isBlank()) {
+            top.child(RuntimeUi.label(event.zoneId, RuntimeUi.COLOR_ZONE_TAG).margins(Insets.left(RuntimeUi.GAP_ITEM)));
+        }
         if (event.ruleId != null && !event.ruleId.isBlank()) {
             top.child(RuntimeUi.label(event.ruleId, RuntimeUi.COLOR_DIM).margins(Insets.left(RuntimeUi.GAP_ITEM)));
         }
         card.child(top);
 
+        // Message
         card.child(RuntimeUi.text(RuntimeUi.valueOrDash(event.message)).margins(Insets.top(RuntimeUi.GAP_TINY)));
+
+        // Details row
+        FlowLayout details = RuntimeUi.row();
         if (event.entityType != null && !event.entityType.isBlank()) {
-            String detail = "Entity: " + event.entityType;
-            if (event.role != null && !event.role.isBlank()) detail += " / " + event.role;
-            if (event.forced) detail += " / forced";
-            card.child(RuntimeUi.dim(detail).margins(Insets.top(RuntimeUi.GAP_TINY)));
+            StringBuilder detail = new StringBuilder();
+            detail.append("Entity: ").append(event.entityType);
+            if (event.role != null && !event.role.isBlank()) detail.append(" / ").append(event.role);
+            if (event.forced) detail.append(" / forced");
+            details.child(RuntimeUi.dim(detail.toString()).margins(Insets.left(RuntimeUi.GAP_TINY)));
         }
+        card.child(details.margins(Insets.top(RuntimeUi.GAP_TINY)));
+
+        // Position info
         if (event.action != null && !event.action.isBlank()) {
             card.child(RuntimeUi.dim("Action: " + event.action + " @ " + event.x + "," + event.y + "," + event.z).margins(Insets.top(RuntimeUi.GAP_TINY)));
         }

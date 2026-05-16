@@ -277,6 +277,15 @@ public class RuntimeCommands {
                                     return 1;
                                 })
                             )
+                            .then(literal("reset-timer")
+                                .executes(context -> {
+                                    String zoneId = StringArgumentType.getString(context, "zoneId");
+                                    String ruleId = StringArgumentType.getString(context, "ruleId");
+                                    ActionResultDto result = RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, context.getSource().getName());
+                                    context.getSource().sendFeedback(() -> Text.literal("Timer reset for " + zoneId + ":" + ruleId), true);
+                                    return 1;
+                                })
+                            )
                             .then(literal("kill-managed")
                                 .executes(context -> {
                                     String zoneId = StringArgumentType.getString(context, "zoneId");
@@ -369,6 +378,19 @@ public class RuntimeCommands {
                                     }
                                     context.getSource().sendError(message);
                                     return 0;
+                                })
+                            )
+                        )
+                    )
+                    .then(literal("reset-timer")
+                        .then(argument("zoneId", StringArgumentType.string())
+                            .then(argument("ruleId", StringArgumentType.string())
+                                .executes(context -> {
+                                    String zoneId = StringArgumentType.getString(context, "zoneId");
+                                    String ruleId = StringArgumentType.getString(context, "ruleId");
+                                    ActionResultDto result = RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, context.getSource().getName());
+                                    context.getSource().sendFeedback(() -> Text.literal("Timer reset for " + zoneId + ":" + ruleId), true);
+                                    return 1;
                                 })
                             )
                         )

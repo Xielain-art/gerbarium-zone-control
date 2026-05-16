@@ -258,88 +258,37 @@ public class RuntimeQueryService {
             int cAlive = MobTracker.getNormalCompanionAliveCount(zoneId, rule.id);
 
             sb.append("Rule: ").append(rule.id).append(" (").append(rule.name).append(")\n");
-            sb.append("  Type: ").append(rule.spawnType).append(" / ").append(rule.refillMode).append("\n");
+            sb.append("  Trigger: ").append(rule.spawnTrigger).append("\n");
             sb.append("  Alive: ").append(pAlive).append("/").append(rule.maxAlive).append(" primary, ").append(cAlive).append(" companions\n");
 
             if (RuntimeRuleValidationUtil.getConfigStatus(rule) != null) {
                 sb.append("  Status: FAILED_INVALID_RULE_CONFIG\n");
             } else if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) {
                 sb.append("  Status: FAILED_INVALID_ENTITY\n");
-            } else if (rule.spawnType == SpawnType.PACK) {
-                if (rule.refillMode == RefillMode.TIMED) {
-                    int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
-                    sb.append("  TIMED interval: ").append(rule.respawnSeconds).append("s\n");
-                    sb.append("  Progress: ").append(TimeUtil.formatDuration(rs.timedProgressMillis)).append(" / ").append(TimeUtil.formatDuration(rule.respawnSeconds * 1000L)).append("\n");
-                    sb.append("  Budget: ").append(rs.timedSpawnedThisActivation).append("/");
-                    if (budget == -1) {
-                        sb.append("UNLIMITED (farm risk!)\n");
-                    } else {
-                        sb.append(budget).append("\n");
-                    }
+            } else if (!zState.active) {
+                sb.append("  Status: inactive\n");
+            } else if (!zState.firstSpawnDelayPassed) {
+                sb.append("  Status: pending_first_spawn_delay\n");
+            } else if (pAlive >= rule.maxAlive) {
+                sb.append("  Status: blocked_max_alive\n");
+            } else if (rs.hasPendingAfterDeathRespawn && rs.pendingAfterDeathRespawnTimeMillis > now) {
+                sb.append("  Status: pending_after_death_respawn (next ").append(TimeUtil.formatRelative(rs.pendingAfterDeathRespawnTimeMillis)).append(")\n");
+            } else if (rs.nextAllowedAttemptTimeMillis > now) {
+                sb.append("  Status: cooldown (next ").append(TimeUtil.formatRelative(rs.nextAllowedAttemptTimeMillis)).append(")\n");
+            } else {
+                sb.append("  Status: ready\n");
+            }
 
-                    if (pAlive >= rule.maxAlive) {
-                        sb.append("  Status: blocked_max_alive\n");
-                    } else if (budget != -1 && rs.timedSpawnedThisActivation >= budget) {
-                        sb.append("  Status: timed_budget_exhausted\n");
-                    } else if (!zState.active) {
-                        sb.append("  Status: inactive\n");
-                    } else if (!zState.firstSpawnDelayPassed) {
-                        sb.append("  Status: pending_first_spawn_delay\n");
-                    } else {
-                        long timeLeft = (rule.respawnSeconds * 1000L) - rs.timedProgressMillis;
-                        if (timeLeft > 0) {
-                            sb.append("  Status: timed_wait (next in ").append(TimeUtil.formatDuration(timeLeft)).append(")\n");
-                        } else {
-                            sb.append("  Status: ready\n");
-                        }
-                    }
-                } else {
-                    sb.append("  Cooldown: ").append(rule.respawnSeconds).append("s\n");
-                    sb.append("  Last activation spawn: ").append(TimeUtil.formatRelative(rs.lastActivationSpawnAt)).append("\n");
-
-                    if (pAlive >= rule.maxAlive) {
-                        sb.append("  Status: blocked_max_alive\n");
-                    } else if (!zState.active) {
-                        sb.append("  Status: inactive\n");
-                    } else if (!zState.firstSpawnDelayPassed) {
-                        sb.append("  Status: pending_first_spawn_delay\n");
-                    } else {
-                        long cooldown = Math.max(zone.activation.reactivationCooldownSeconds, rule.respawnSeconds) * 1000L;
-                        if (now - rs.lastActivationSpawnAt < cooldown) {
-                            sb.append("  Status: cooldown (next ").append(TimeUtil.formatRelative(rs.lastActivationSpawnAt + cooldown)).append(")\n");
-                        } else {
-                            sb.append("  Status: ready\n");
-                        }
-                    }
-                }
-            } else if (rule.spawnType == SpawnType.UNIQUE) {
-                sb.append("  Encounter active: ").append(rs.encounterActive).append("\n");
-                sb.append("  Primary alive: ").append(pAlive).append("\n");
-                sb.append("  Companions alive: ").append(cAlive).append("\n");
-
-                if (rs.encounterActive) {
-                    if (pAlive > 0) {
-                        sb.append("  Status: alive\n");
-                        sb.append("  Started: ").append(TimeUtil.formatRelative(rs.encounterStartedAt)).append("\n");
-                    } else {
-                        sb.append("  Status: waiting_for_companions_clear\n");
-                        sb.append("  Cooldown: not started yet\n");
-                        sb.append("  Reason: Primary is dead, but companions are still alive.\n");
-                    }
-                } else {
-                    if (rs.nextAvailableAt > now) {
-                        sb.append("  Status: cooldown\n");
-                        sb.append("  Next available: ").append(TimeUtil.formatRelative(rs.nextAvailableAt)).append("\n");
-                    } else if (rs.nextAttemptAt > now) {
-                        sb.append("  Status: retry_wait\n");
-                        sb.append("  Next attempt: ").append(TimeUtil.formatRelative(rs.nextAttemptAt)).append("\n");
-                    } else {
-                        sb.append("  Status: ready\n");
-                    }
-                    if (rs.encounterClearedAt > 0) {
-                        sb.append("  Last cleared: ").append(TimeUtil.formatRelative(rs.encounterClearedAt)).append("\n");
-                    }
-                }
+            sb.append("  Respawn: ").append(rule.respawnSeconds).append("s  Retry: ").append(rule.retrySeconds).append("s\n");
+            sb.append("  Next allowed attempt: ").append(TimeUtil.formatRelative(rs.nextAllowedAttemptTimeMillis)).append("\n");
+            if (rs.lastAttemptAt > 0) {
+                sb.append("  Last attempt: ").append(TimeUtil.formatRelative(rs.lastAttemptAt)).append(" result=").append(rs.lastAttemptResult).append("\n");
+            }
+            if (rs.lastDeathAt > 0) {
+                sb.append("  Last death: ").append(TimeUtil.formatRelative(rs.lastDeathAt)).append(" deaths=").append(rs.deathCount).append("\n");
+            }
+            if (rs.lastSuccessAt > 0) {
+                sb.append("  Last success: ").append(TimeUtil.formatRelative(rs.lastSuccessAt)).append("\n");
             }
 
             sb.append("\n");
@@ -379,12 +328,12 @@ public class RuntimeQueryService {
         sb.append("rule exists=true\n");
         sb.append("rule enabled=").append(rule.enabled).append("\n");
         sb.append("currentAlive=").append(pAlive).append("\n");
-        sb.append("retrySeconds=").append(rule.failedSpawnRetrySeconds).append("\n");
+        sb.append("retrySeconds=").append(rule.retrySeconds).append("\n");
         long now = System.currentTimeMillis();
-        long nextAllowed = Math.max(rs.nextAvailableAt, rs.nextAttemptAt);
-        long remainingTicks = Math.max(0L, (nextAllowed - now + 49L) / 50L);
-        sb.append("nextAllowedTick=").append(nextAllowed <= 0 ? 0 : nextAllowed / 50L).append("\n");
-        sb.append("remainingCooldownTicks=").append(remainingTicks).append("\n");
+        long nextAllowed = Math.max(rs.nextAllowedAttemptTimeMillis, Math.max(rs.nextAvailableAt, rs.nextAttemptAt));
+        long remainingSeconds = Math.max(0L, (nextAllowed - now) / 1000L);
+        sb.append("nextAllowedTimeMillis=").append(nextAllowed).append("\n");
+        sb.append("remainingCooldownSeconds=").append(remainingSeconds).append("\n");
         sb.append("lastFailureReason=").append(valueOrDash(rs.lastPositionSearchReason.isBlank() ? rs.lastAttemptReason : rs.lastPositionSearchReason)).append("\n");
         sb.append("lastPositionSearchStats=").append(valueOrDash(rs.lastPositionSearchStats)).append("\n");
         sb.append("\n");
@@ -392,11 +341,12 @@ public class RuntimeQueryService {
         sb.append("Name: ").append(rule.name).append("\n");
         sb.append("Entity: ").append(rule.entity).append("\n");
         sb.append("Enabled: ").append(rule.enabled).append("\n");
-        sb.append("Spawn Type: ").append(rule.spawnType).append("\n");
-        sb.append("Refill Mode: ").append(rule.refillMode).append("\n");
+        sb.append("Spawn Trigger: ").append(rule.spawnTrigger).append("\n");
         sb.append("Max Alive: ").append(rule.maxAlive).append("\n");
         sb.append("Spawn Count: ").append(rule.spawnCount).append("\n");
         sb.append("Respawn Seconds: ").append(rule.respawnSeconds).append("\n");
+        sb.append("Retry Seconds: ").append(rule.retrySeconds).append("\n");
+        sb.append("After Death Delay Seconds: ").append(rule.afterDeathDelaySeconds).append("\n");
         sb.append("Chance: ").append(rule.chance).append("\n");
         sb.append("Companions: ").append(rule.companions.size()).append(" configured\n");
         sb.append("Boundary Mode: ").append(rule.boundaryMode).append("\n");
@@ -411,14 +361,20 @@ public class RuntimeQueryService {
         sb.append("Current State:\n");
         sb.append("  Primary alive: ").append(pAlive).append("\n");
         sb.append("  Companions alive: ").append(cAlive).append("\n");
+        sb.append("  Tracked UUIDs: ").append(rs.aliveEntityUuids != null ? rs.aliveEntityUuids.size() : 0).append("\n");
         sb.append("  Last attempt: ").append(TimeUtil.formatRelative(rs.lastAttemptAt)).append("\n");
         sb.append("  Last attempt result: ").append(rs.lastAttemptResult).append("\n");
         sb.append("  Last attempt reason: ").append(rs.lastAttemptReason).append("\n");
         sb.append("  Last success: ").append(TimeUtil.formatRelative(rs.lastSuccessAt)).append("\n");
+        sb.append("  Last death: ").append(TimeUtil.formatRelative(rs.lastDeathAt)).append(" (count=").append(rs.deathCount).append(")\n");
         sb.append("  Total attempts: ").append(rs.totalAttempts).append("\n");
         sb.append("  Total successes: ").append(rs.totalSuccesses).append("\n");
         sb.append("  Total primary spawned: ").append(rs.totalPrimarySpawned).append("\n");
         sb.append("  Total companions spawned: ").append(rs.totalCompanionsSpawned).append("\n");
+        sb.append("  Has pending after-death respawn: ").append(rs.hasPendingAfterDeathRespawn).append("\n");
+        if (rs.hasPendingAfterDeathRespawn) {
+            sb.append("  After-death respawn at: ").append(TimeUtil.formatRelative(rs.pendingAfterDeathRespawnTimeMillis)).append("\n");
+        }
         String currentStatus;
         if (worldMissing) {
             currentStatus = "FAILED_WORLD_UNAVAILABLE";
@@ -436,29 +392,21 @@ public class RuntimeQueryService {
         sb.append("  Current status: ").append(currentStatus).append("\n");
         sb.append("\n");
 
-        if (rule.refillMode == RefillMode.TIMED) {
-            int budget = rule.timedMaxSpawnsPerActivation != null ? rule.timedMaxSpawnsPerActivation : rule.maxAlive;
-            sb.append("TIMED Details:\n");
-            sb.append("  Progress: ").append(TimeUtil.formatDuration(rs.timedProgressMillis)).append(" / ").append(TimeUtil.formatDuration(rule.respawnSeconds * 1000L)).append("\n");
-            sb.append("  Spawned this activation: ").append(rs.timedSpawnedThisActivation).append("\n");
-            sb.append("  Budget per activation: ");
-            if (budget == -1) {
-                sb.append("UNLIMITED\n");
-                sb.append("  WARNING: Farm risk - unlimited TIMED spawning while active!\n");
-            } else {
-                sb.append(budget).append("\n");
-            }
-        }
-
-        if (rule.spawnType == SpawnType.UNIQUE) {
-            sb.append("\nUNIQUE Details:\n");
-            sb.append("  Encounter active: ").append(rs.encounterActive).append("\n");
-            sb.append("  Encounter started: ").append(TimeUtil.formatRelative(rs.encounterStartedAt)).append("\n");
-            sb.append("  Encounter cleared: ").append(TimeUtil.formatRelative(rs.encounterClearedAt)).append("\n");
-            sb.append("  Encounter primary alive: ").append(rs.encounterPrimaryAlive).append("\n");
-            sb.append("  Encounter companions alive: ").append(rs.encounterCompanionsAlive).append("\n");
-            sb.append("  Next available: ").append(TimeUtil.formatRelative(rs.nextAvailableAt)).append("\n");
-            sb.append("  Next attempt: ").append(TimeUtil.formatRelative(rs.nextAttemptAt)).append("\n");
+        sb.append("Spawn Trigger Details:\n");
+        sb.append("  Trigger: ").append(rule.spawnTrigger).append("\n");
+        if (rule.spawnTrigger == com.gerbarium.runtime.model.SpawnTrigger.TIMER) {
+            sb.append("  Mode: Timer-based automatic spawning\n");
+            sb.append("  Respawn interval: ").append(rule.respawnSeconds).append("s\n");
+        } else if (rule.spawnTrigger == com.gerbarium.runtime.model.SpawnTrigger.AFTER_DEATH) {
+            sb.append("  Mode: After-death respawn\n");
+            sb.append("  Delay: ").append(rule.afterDeathDelaySeconds).append("s\n");
+            sb.append("  Respawn after death: ").append(rule.respawnAfterDeath).append("\n");
+        } else if (rule.spawnTrigger == com.gerbarium.runtime.model.SpawnTrigger.TIMER_AND_AFTER_DEATH) {
+            sb.append("  Mode: Timer + after-death respawn\n");
+            sb.append("  Respawn interval: ").append(rule.respawnSeconds).append("s\n");
+            sb.append("  After-death delay: ").append(rule.afterDeathDelaySeconds).append("s\n");
+        } else if (rule.spawnTrigger == com.gerbarium.runtime.model.SpawnTrigger.MANUAL_ONLY) {
+            sb.append("  Mode: Manual spawn only\n");
         }
 
         sb.append("\nBoundary Control:\n");

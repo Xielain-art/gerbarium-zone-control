@@ -86,23 +86,27 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
     private FlowLayout buildActions() {
         FlowLayout col = RuntimeUi.col();
 
-        FlowLayout row1 = RuntimeUi.row();
-        row1.child(RuntimeUi.button("Back", () -> client.setScreen(parent)));
-        row1.child(RuntimeUi.button("Refresh", this::requestRuleDetails).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row1.child(RuntimeUi.button("Rule History", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, ruleId))).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        col.child(row1);
+        // Navigation row
+        FlowLayout navRow = RuntimeUi.row();
+        navRow.child(RuntimeUi.button("Back", "Return to previous screen", () -> client.setScreen(parent)));
+        navRow.child(RuntimeUi.button("Refresh", "Reload rule details from server", this::requestRuleDetails).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        navRow.child(RuntimeUi.button("Rule History", "View event history for this rule", () -> client.setScreen(new RuntimeEventsScreen(this, snapshot, zoneId, ruleId))).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        col.child(navRow);
 
-        FlowLayout row2 = RuntimeUi.row();
-        row2.child(RuntimeUi.button("Force Spawn", () -> confirm("Force Spawn", "Force spawn rule " + ruleId + "?", "FORCE_RULE_SPAWN:" + zoneId + ":" + ruleId)));
-        row2.child(RuntimeUi.button("Force Primary", () -> confirm("Force Primary", "Spawn only the primary entity for rule " + ruleId + "?", "FORCE_RULE_PRIMARY:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row2.child(RuntimeUi.button("Force Companions", () -> confirm("Force Companions", "Spawn companions for rule " + ruleId + "?", "FORCE_RULE_COMPANIONS:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        col.child(row2.margins(Insets.top(RuntimeUi.GAP_TINY)));
+        // Spawn actions row
+        FlowLayout spawnRow = RuntimeUi.row();
+        spawnRow.child(RuntimeUi.button("Force Spawn", "Spawn primary + companions", () -> confirm("Force Spawn", "Force spawn rule " + ruleId + "?", "FORCE_RULE_SPAWN:" + zoneId + ":" + ruleId)));
+        spawnRow.child(RuntimeUi.button("Force Primary", "Spawn only primary entity", () -> confirm("Force Primary", "Spawn only the primary entity for rule " + ruleId + "?", "FORCE_RULE_PRIMARY:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        spawnRow.child(RuntimeUi.button("Force Companions", "Spawn only companions", () -> confirm("Force Companions", "Spawn companions for rule " + ruleId + "?", "FORCE_RULE_COMPANIONS:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        col.child(spawnRow.margins(Insets.top(RuntimeUi.GAP_TINY)));
 
-        FlowLayout row3 = RuntimeUi.row();
-        row3.child(RuntimeUi.button("Reset Cooldown", () -> confirm("Reset Cooldown", "Reset cooldown state for rule " + ruleId + "?", "RESET_RULE_COOLDOWN:" + zoneId + ":" + ruleId)));
-        row3.child(RuntimeUi.button("Kill Managed", () -> confirm("Kill Managed", "Discard managed mobs for rule " + ruleId + "?", "KILL_MANAGED:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        row3.child(RuntimeUi.button("Clear Rule State", () -> confirm("Clear Rule State", "Remove runtime state for rule " + ruleId + "?", "CLEAR_RULE_STATE:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
-        col.child(row3.margins(Insets.top(RuntimeUi.GAP_TINY)));
+        // State management row
+        FlowLayout stateRow = RuntimeUi.row();
+        stateRow.child(RuntimeUi.button("Reset Timer", "Clear cooldown and allow immediate spawn attempt", () -> confirm("Reset Timer", "Reset timer for rule " + ruleId + "?", "RESET_RULE_TIMER:" + zoneId + ":" + ruleId)));
+        stateRow.child(RuntimeUi.button("Reset Cooldown", "Reset cooldown state", () -> confirm("Reset Cooldown", "Reset cooldown state for rule " + ruleId + "?", "RESET_RULE_COOLDOWN:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        stateRow.child(RuntimeUi.button("Kill Managed", "Remove all mobs tracked by this rule", () -> confirm("Kill Managed", "Discard managed mobs for rule " + ruleId + "?", "KILL_MANAGED:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        stateRow.child(RuntimeUi.button("Clear Rule State", "Delete runtime state for this rule", () -> confirm("Clear Rule State", "Remove runtime state for rule " + ruleId + "?", "CLEAR_RULE_STATE:" + zoneId + ":" + ruleId)).margins(Insets.left(RuntimeUi.GAP_TINY)));
+        col.child(stateRow.margins(Insets.top(RuntimeUi.GAP_TINY)));
 
         return col;
     }
@@ -120,8 +124,8 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         body.child(buildAttemptSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         body.child(buildSuccessSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         body.child(buildStatusSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
-        body.child(buildOnActivationSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
-        body.child(buildTimedSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
+        body.child(buildTimerSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
+        body.child(buildAfterDeathSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         body.child(buildUniqueSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
         body.child(buildCompanionSection().margins(Insets.top(RuntimeUi.GAP_SECTION)));
     }
@@ -133,8 +137,8 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Name", displayName(rule)));
         sec.child(RuntimeUi.kv("Entity", RuntimeUi.valueOrDash(rule.entity)));
         sec.child(RuntimeUi.kv("Enabled", RuntimeUi.boolText(rule.enabled)));
-        sec.child(RuntimeUi.kv("Spawn type", RuntimeUi.valueOrDash(rule.spawnType)));
-        sec.child(RuntimeUi.kv("Refill mode", RuntimeUi.valueOrDash(rule.refillMode)));
+        sec.child(RuntimeUi.kv("Spawn trigger", RuntimeUi.valueOrDash(rule.spawnTrigger)));
+        sec.child(RuntimeUi.kv("Spawn mode", RuntimeUi.valueOrDash(rule.spawnMode)));
         sec.child(RuntimeUi.kv("Boundary mode", RuntimeUi.valueOrDash(rule.boundaryMode)));
         sec.child(RuntimeUi.kv("Boundary max outside seconds", String.valueOf(rule.boundaryMaxOutsideSeconds)));
         sec.child(RuntimeUi.kv("Boundary check interval ticks", String.valueOf(rule.boundaryCheckIntervalTicks)));
@@ -142,13 +146,15 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Max alive", String.valueOf(rule.maxAlive)));
         sec.child(RuntimeUi.kv("Spawn count", String.valueOf(rule.spawnCount)));
         sec.child(RuntimeUi.kv("Respawn seconds", String.valueOf(rule.respawnSeconds)));
+        sec.child(RuntimeUi.kv("Retry seconds", String.valueOf(rule.retrySeconds)));
+        sec.child(RuntimeUi.kv("After death delay seconds", String.valueOf(rule.afterDeathDelaySeconds)));
         sec.child(RuntimeUi.kv("Chance", String.format("%.2f", rule.chance)));
         sec.child(RuntimeUi.kv("Cooldown start", RuntimeUi.valueOrDash(rule.cooldownStart)));
         sec.child(RuntimeUi.kv("Spawn when ready", RuntimeUi.boolText(rule.spawnWhenReady)));
-        sec.child(RuntimeUi.kv("Failed retry seconds", String.valueOf(rule.failedSpawnRetrySeconds)));
         sec.child(RuntimeUi.kv("Despawn when inactive", RuntimeUi.boolText(rule.despawnWhenZoneInactive)));
         sec.child(RuntimeUi.kv("Announce on spawn", RuntimeUi.boolText(rule.announceOnSpawn)));
-        sec.child(RuntimeUi.kv("Spawn mode", RuntimeUi.valueOrDash(rule.spawnMode)));
+        sec.child(RuntimeUi.kv("Respawn after death", RuntimeUi.boolText(rule.respawnAfterDeath)));
+        sec.child(RuntimeUi.kv("Respawn after despawn", RuntimeUi.boolText(rule.respawnAfterDespawn)));
         sec.child(RuntimeUi.kv("Fixed X", rule.fixedX == null ? "-" : String.valueOf(rule.fixedX)));
         sec.child(RuntimeUi.kv("Fixed Y", rule.fixedY == null ? "-" : String.valueOf(rule.fixedY)));
         sec.child(RuntimeUi.kv("Fixed Z", rule.fixedZ == null ? "-" : String.valueOf(rule.fixedZ)));
@@ -156,7 +162,10 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         sec.child(RuntimeUi.kv("Spread spawns", RuntimeUi.boolText(rule.spreadSpawns)));
         sec.child(RuntimeUi.kv("Min spawn distance", String.valueOf(rule.minDistanceBetweenSpawns)));
         sec.child(RuntimeUi.kv("Position attempts", String.valueOf(rule.positionAttempts)));
-        sec.child(RuntimeUi.kv("Timed budget", rule.timedMaxSpawnsPerActivation == null ? "null" : String.valueOf(rule.timedMaxSpawnsPerActivation)));
+        sec.child(RuntimeUi.kv("Require player nearby", RuntimeUi.boolText(rule.requirePlayerNearby)));
+        sec.child(RuntimeUi.kv("Player activation range", String.valueOf(rule.playerActivationRange)));
+        sec.child(RuntimeUi.kv("Require chunk loaded", RuntimeUi.boolText(rule.requireChunkLoaded)));
+        sec.child(RuntimeUi.kv("Allow force load", RuntimeUi.boolText(rule.allowForceLoad)));
         return sec;
     }
 
@@ -212,32 +221,43 @@ public class RuntimeRuleDetailsScreen extends BaseOwoScreen<FlowLayout> implemen
         FlowLayout sec = RuntimeUi.section("Current Status");
         sec.child(RuntimeUi.kv("Current status", RuntimeUi.valueOrDash(rule.currentStatus)));
         sec.child(RuntimeUi.kv("Next action", RuntimeUi.valueOrDash(rule.nextActionText)));
+
+        // Show countdown prominently if applicable
+        long now = System.currentTimeMillis();
+        long nextAttempt = rule.nextAllowedAttemptTimeMillis;
+        if (nextAttempt > now) {
+            long remainingSeconds = (nextAttempt - now) / 1000L;
+            sec.child(RuntimeUi.kv("Next attempt in", remainingSeconds + "s"));
+        }
+        if (rule.hasPendingAfterDeathRespawn && rule.pendingAfterDeathRespawnTimeMillis > now) {
+            long remainingSeconds = (rule.pendingAfterDeathRespawnTimeMillis - now) / 1000L;
+            sec.child(RuntimeUi.kv("After-death respawn in", remainingSeconds + "s"));
+        }
+
         sec.child(RuntimeUi.kv("Hint", RuntimeUi.valueOrDash(rule.hintText)));
         sec.child(RuntimeUi.kv("Warning", RuntimeUi.valueOrDash(rule.warningText)));
         sec.child(RuntimeUi.kv("Boundary status", RuntimeUi.valueOrDash(rule.boundaryStatus)));
         return sec;
     }
 
-    private FlowLayout buildOnActivationSection() {
-        FlowLayout sec = RuntimeUi.section("PACK ON_ACTIVATION");
+    private FlowLayout buildTimerSection() {
+        FlowLayout sec = RuntimeUi.section("Timer State");
+        sec.child(RuntimeUi.kv("Next allowed attempt", TimeUtil.formatRelative(rule.nextAllowedAttemptTimeMillis)));
+        sec.child(RuntimeUi.kv("Cooldown remaining", TimeUtil.formatDuration(Math.max(0, rule.nextAllowedAttemptTimeMillis - System.currentTimeMillis()))));
         sec.child(RuntimeUi.kv("Last activation spawn", TimeUtil.formatRelative(rule.lastActivationSpawnAt)));
-        sec.child(RuntimeUi.kv("Last activation attempt id", String.valueOf(rule.lastOnActivationAttemptActivationId)));
-        sec.child(RuntimeUi.kv("Current activation id", String.valueOf(currentActivationId())));
-        sec.child(RuntimeUi.kv("Already attempted this activation", RuntimeUi.boolText(rule.lastOnActivationAttemptActivationId == currentActivationId())));
-        sec.child(RuntimeUi.kv("Next available", TimeUtil.formatRelative(rule.nextAvailableAt)));
+        sec.child(RuntimeUi.kv("Last attempt", TimeUtil.formatRelative(rule.lastAttemptAt)));
+        sec.child(RuntimeUi.kv("Last attempt result", RuntimeUi.valueOrDash(rule.lastAttemptResult)));
+        sec.child(RuntimeUi.kv("Last attempt reason", RuntimeUi.valueOrDash(rule.lastAttemptReason)));
+        sec.child(RuntimeUi.kv("Last position search stats", RuntimeUi.valueOrDash(rule.lastPositionSearchStats)));
         return sec;
     }
 
-    private FlowLayout buildTimedSection() {
-        FlowLayout sec = RuntimeUi.section("PACK TIMED");
-        sec.child(RuntimeUi.kv("Timed progress", TimeUtil.formatDuration(rule.timedProgressMillis)));
-        sec.child(RuntimeUi.kv("Next timed spawn", TimeUtil.formatDuration(rule.nextTimedSpawnInMillis)));
-        sec.child(RuntimeUi.kv("Spawned this activation", String.valueOf(rule.timedSpawnedThisActivation)));
-        sec.child(RuntimeUi.kv("Budget exhausted", RuntimeUi.boolText(rule.timedBudgetExhausted)));
-        sec.child(RuntimeUi.kv("Last budget reset", TimeUtil.formatRelative(rule.lastTimedBudgetResetAt)));
-        if (rule.timedMaxSpawnsPerActivation != null && rule.timedMaxSpawnsPerActivation == -1) {
-            sec.child(RuntimeUi.warn("Warning: unlimited timed budget can create farm risk.").margins(Insets.top(RuntimeUi.GAP_TINY)));
-        }
+    private FlowLayout buildAfterDeathSection() {
+        FlowLayout sec = RuntimeUi.section("After-Death Respawn");
+        sec.child(RuntimeUi.kv("Has pending respawn", RuntimeUi.boolText(rule.hasPendingAfterDeathRespawn)));
+        sec.child(RuntimeUi.kv("Pending respawn time", TimeUtil.formatRelative(rule.pendingAfterDeathRespawnTimeMillis)));
+        sec.child(RuntimeUi.kv("Death count", String.valueOf(rule.deathCount)));
+        sec.child(RuntimeUi.kv("Last death", TimeUtil.formatRelative(rule.lastDeathAt)));
         return sec;
     }
 

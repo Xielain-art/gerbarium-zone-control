@@ -5,7 +5,7 @@ import com.gerbarium.runtime.admin.ActionResultDto;
 import com.gerbarium.runtime.admin.RuntimeAdminService;
 import com.gerbarium.runtime.config.RuntimeConfigStorage;
 import com.gerbarium.runtime.model.MobRule;
-import com.gerbarium.runtime.model.RefillMode;
+import com.gerbarium.runtime.model.SpawnTrigger;
 import com.gerbarium.runtime.model.SpawnType;
 import com.gerbarium.runtime.model.Zone;
 import com.gerbarium.runtime.permission.PermissionUtil;
@@ -136,7 +136,7 @@ public class GerbariumRuntimeServerNetworking {
                     result = RuntimeAdminService.forceSpawnPrimary(param1, param2, server, player.getName().getString());
                 } else if ("FORCE_RULE_COMPANIONS".equals(actionCode)) {
                     result = RuntimeAdminService.forceSpawnCompanions(param1, param2, server, player, player.getName().getString());
-                } else if ("RESET_RULE_COOLDOWN".equals(actionCode)) {
+                } else if ("RESET_RULE_COOLDOWN".equals(actionCode) || "RESET_RULE_TIMER".equals(actionCode)) {
                     result = RuntimeAdminService.resetRuleCooldown(param1, param2, player.getName().getString());
                 } else if ("KILL_MANAGED".equals(actionCode)) {
                     result = RuntimeAdminService.killManagedMobs(param1, param2, server, player.getName().getString());
@@ -343,7 +343,7 @@ public class GerbariumRuntimeServerNetworking {
             case "FORCE_RULE_SPAWN" -> RuntimeAdminService.forceSpawnRule(zoneId, ruleId, server, player.getName().getString());
             case "FORCE_RULE_PRIMARY" -> RuntimeAdminService.forceSpawnPrimary(zoneId, ruleId, server, player.getName().getString());
             case "FORCE_RULE_COMPANIONS" -> RuntimeAdminService.forceSpawnCompanions(zoneId, ruleId, server, player, player.getName().getString());
-            case "RESET_RULE_COOLDOWN" -> RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, player.getName().getString());
+            case "RESET_RULE_COOLDOWN", "RESET_RULE_TIMER" -> RuntimeAdminService.resetRuleCooldown(zoneId, ruleId, player.getName().getString());
             case "KILL_MANAGED" -> RuntimeAdminService.killManagedMobs(zoneId, ruleId, server, player.getName().getString());
             case "CLEAR_RULE_STATE" -> RuntimeAdminService.clearRuleState(zoneId, ruleId, player.getName().getString());
             default -> new ActionResultDto(false, "Unknown rule action: " + actionCode);
@@ -406,6 +406,7 @@ public class GerbariumRuntimeServerNetworking {
             }
             z.primaryAliveTotal = totalPrimaryAlive;
             z.companionsAliveTotal = totalCompanionsAlive;
+            z.mobsCount = totalPrimaryAlive + totalCompanionsAlive;
             ZoneStateFile zf = RuntimeStateStorage.getZoneState(zone.id);
             z.boundaryOutsideCount = zone.mobs.stream()
                     .mapToInt(rule -> {
@@ -469,12 +470,14 @@ public class GerbariumRuntimeServerNetworking {
                 rs.enabled = rule.enabled;
                 
                 rs.refillMode = rule.refillMode == null ? null : rule.refillMode.name();
+                rs.spawnTrigger = rule.spawnTrigger == null ? null : rule.spawnTrigger.name();
                 rs.boundaryMode = rule.boundaryMode;
                 rs.boundaryMaxOutsideSeconds = rule.boundaryMaxOutsideSeconds;
                 rs.boundaryCheckIntervalTicks = rule.boundaryCheckIntervalTicks;
                 rs.boundaryTeleportBack = rule.boundaryTeleportBack;
                 rs.spawnCount = rule.spawnCount;
                 rs.respawnSeconds = rule.respawnSeconds;
+                rs.retrySeconds = rule.retrySeconds;
                 rs.chance = rule.chance;
                 rs.timedMaxSpawnsPerActivation = rule.timedMaxSpawnsPerActivation;
                 rs.cooldownStart = rule.cooldownStart == null ? null : rule.cooldownStart.name();
@@ -482,6 +485,9 @@ public class GerbariumRuntimeServerNetworking {
                 rs.failedSpawnRetrySeconds = rule.failedSpawnRetrySeconds;
                 rs.despawnWhenZoneInactive = rule.despawnWhenZoneInactive;
                 rs.announceOnSpawn = rule.announceOnSpawn;
+                rs.respawnAfterDeath = rule.respawnAfterDeath;
+                rs.respawnAfterDespawn = rule.respawnAfterDespawn;
+                rs.afterDeathDelaySeconds = rule.afterDeathDelaySeconds;
                 rs.spawnMode = rule.spawnMode == null ? "RANDOM_VALID_POSITION" : rule.spawnMode.name();
                 rs.fixedX = rule.fixedX;
                 rs.fixedY = rule.fixedY;
@@ -490,6 +496,10 @@ public class GerbariumRuntimeServerNetworking {
                 rs.positionAttempts = rule.positionAttempts;
                 rs.minDistanceBetweenSpawns = rule.minDistanceBetweenSpawns;
                 rs.spreadSpawns = rule.spreadSpawns;
+                rs.requirePlayerNearby = rule.requirePlayerNearby;
+                rs.playerActivationRange = rule.playerActivationRange;
+                rs.requireChunkLoaded = rule.requireChunkLoaded;
+                rs.allowForceLoad = rule.allowForceLoad;
 
                 RuleRuntimeState ruleState = zf.rules.get(rule.id);
                 if (ruleState != null) {
@@ -510,7 +520,11 @@ public class GerbariumRuntimeServerNetworking {
                     rs.lastSuccessfulCompanionCount = ruleState.lastSuccessfulCompanionCount;
                     rs.nextAvailableAt = ruleState.nextAvailableAt;
                     rs.nextAttemptAt = ruleState.nextAttemptAt;
+                    rs.nextAllowedAttemptTimeMillis = ruleState.nextAllowedAttemptTimeMillis;
                     rs.lastDeathAt = ruleState.lastDeathAt;
+                    rs.deathCount = ruleState.deathCount;
+                    rs.hasPendingAfterDeathRespawn = ruleState.hasPendingAfterDeathRespawn;
+                    rs.pendingAfterDeathRespawnTimeMillis = ruleState.pendingAfterDeathRespawnTimeMillis;
                     rs.encounterActive = ruleState.encounterActive;
                     rs.encounterStartedAt = ruleState.encounterStartedAt;
                     rs.encounterClearedAt = ruleState.encounterClearedAt;
@@ -623,6 +637,7 @@ public class GerbariumRuntimeServerNetworking {
 
     private static String computeRuleCurrentStatus(MinecraftServer server, Zone zone, ZoneRuntimeState zState, ZoneStateFile zf, MobRule rule, RuleSummaryDto rs) {
         if (!zone.enabled || !rule.enabled) return "DISABLED";
+        if (zf.zone == null) return "STATE_MISSING";
         if (RuntimeWorldUtil.getWorld(server, zone.dimension).isEmpty()) return "FAILED_WORLD_UNAVAILABLE";
         String configStatus = RuntimeRuleValidationUtil.getConfigStatus(rule);
         if (configStatus != null) return configStatus;
@@ -630,18 +645,10 @@ public class GerbariumRuntimeServerNetworking {
         if (entityStatus != null) return entityStatus;
         if (!zState.active) return "INACTIVE";
         if (!zState.firstSpawnDelayPassed) return "PENDING_FIRST_SPAWN_DELAY";
-        if (rule.spawnType == SpawnType.UNIQUE && rs.encounterActive) {
-            if (rs.aliveCount > 0) return "ALIVE";
-            if (rs.encounterCompanionsAlive > 0) return "WAITING_FOR_COMPANIONS_CLEAR";
-            return "ENCOUNTER_ACTIVE";
-        }
-        if (rule.refillMode == RefillMode.TIMED) {
-            if (rs.timedBudgetExhausted) return "TIMED_BUDGET_EXHAUSTED";
-            if (rs.nextTimedSpawnInMillis > 0) return "TIMED_WAIT";
-        }
-        if (rs.nextAvailableAt > System.currentTimeMillis()) return "COOLDOWN";
+        if (rule.spawnTrigger == SpawnTrigger.MANUAL_ONLY) return "MANUAL_ONLY";
         if (rs.aliveCount >= rule.maxAlive) return "BLOCKED_MAX_ALIVE";
-        if (rule.spawnType == SpawnType.PACK && rule.refillMode == RefillMode.ON_ACTIVATION && rs.lastOnActivationAttemptActivationId == zState.activationId) return "ALREADY_ATTEMPTED_THIS_ACTIVATION";
+        if (rs.nextAllowedAttemptTimeMillis > System.currentTimeMillis()) return "COOLDOWN";
+        if (rs.hasPendingAfterDeathRespawn && rs.pendingAfterDeathRespawnTimeMillis > System.currentTimeMillis()) return "PENDING_AFTER_DEATH_RESPAWN";
         return "READY";
     }
 
@@ -664,12 +671,12 @@ public class GerbariumRuntimeServerNetworking {
         if (RuntimeRuleValidationUtil.getEntityStatus(rule) != null) return "Fix entity id before spawning.";
         if (!zState.active) return "Wait for zone activation.";
         if (!zState.firstSpawnDelayPassed) return "Wait for first spawn delay.";
-        if (rule.refillMode == RefillMode.TIMED) {
-            if (rs.timedBudgetExhausted) return "Budget exhausted until reactivation cooldown passes.";
-            if (rs.nextTimedSpawnInMillis > 0) return "Next timed spawn in " + TimeUtil.formatDuration(rs.nextTimedSpawnInMillis);
-        }
+        if (rule.spawnTrigger == SpawnTrigger.MANUAL_ONLY) return "Manual only - use Force Spawn.";
         if (rs.aliveCount >= rule.maxAlive) return "Waiting for primary count below maxAlive.";
-        if (rs.nextAvailableAt > System.currentTimeMillis()) return "Next available " + TimeUtil.formatRelative(rs.nextAvailableAt);
+        if (rs.hasPendingAfterDeathRespawn && rs.pendingAfterDeathRespawnTimeMillis > System.currentTimeMillis()) {
+            return "After-death respawn in " + TimeUtil.formatRelative(rs.pendingAfterDeathRespawnTimeMillis);
+        }
+        if (rs.nextAllowedAttemptTimeMillis > System.currentTimeMillis()) return "Next attempt " + TimeUtil.formatRelative(rs.nextAllowedAttemptTimeMillis);
         return "Ready to spawn.";
     }
 
@@ -679,8 +686,6 @@ public class GerbariumRuntimeServerNetworking {
         if (rule.spawnType == null) return "Invalid spawn type.";
         if (rs.forcedPrimaryAlive > 0 || rs.forcedCompanionAlive > 0) return "Forced mobs are alive; normal maxAlive ignores them, but they still exist physically.";
         if (rule.spawnType == SpawnType.UNIQUE && rule.maxAlive > 1) return "Unique rules usually use maxAlive = 1.";
-        if (rule.refillMode == RefillMode.TIMED && rule.timedMaxSpawnsPerActivation != null && rule.timedMaxSpawnsPerActivation == -1) return "Unlimited timed budget can create farm risk.";
-        if (rule.spawnType == SpawnType.PACK && rule.refillMode == RefillMode.ON_ACTIVATION && rs.lastOnActivationAttemptActivationId == zState.activationId) return "Already attempted this activation.";
         String boundaryIntervalWarning = RuntimeRuleValidationUtil.getBoundaryIntervalWarning(rule);
         if (boundaryIntervalWarning != null) return boundaryIntervalWarning;
         return "";
@@ -693,7 +698,7 @@ public class GerbariumRuntimeServerNetworking {
         if (!zState.firstSpawnDelayPassed) return "First spawn delay pending.";
         if ("FAILED_NO_POSITION".equals(rs.lastAttemptResult)) return "No valid spawn position found. Check zone size, Y range, loaded chunks, minDistanceFromPlayer, and ground mode.";
         if (rule.spawnType == SpawnType.UNIQUE && rs.encounterCompanionsAlive > 0 && rs.encounterPrimaryAlive == 0) return "Waiting for companions to clear before cooldown starts.";
-        if (rule.refillMode == RefillMode.TIMED && rs.timedBudgetExhausted) return "Leave and re-enter after reactivation cooldown to refresh budget.";
+        if (rs.hasPendingAfterDeathRespawn) return "After-death respawn scheduled.";
         return "";
     }
 

@@ -79,6 +79,13 @@ jar {
 	}
 }
 
+build.doLast {
+	def src = remapJar.archiveFile.get().asFile
+	def destDir = project == rootProject ? file('..') : rootProject.file('.')
+	def dest = new File(destDir, "${project.archives_base_name}-${project.version}.jar")
+	java.nio.file.Files.copy(src.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+}
+
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
